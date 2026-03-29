@@ -2,13 +2,17 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import type { Followup } from "@/types/database";
 
-const supabase = createClient();
+let _supabase: ReturnType<typeof createClient>;
+function getSupabase() {
+  if (!_supabase) _supabase = createClient();
+  return _supabase;
+}
 
 export function useFollowups(fecha: string) {
   return useQuery({
     queryKey: ["fups", fecha],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await getSupabase()
         .from("followups")
         .select("*, lead:leads(*, closer:users!leads_closer_id_fkey(*))")
         .eq("fecha_programada", fecha)
@@ -24,7 +28,7 @@ export function useLeadFollowups(leadId: string) {
   return useQuery({
     queryKey: ["fups", "lead", leadId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await getSupabase()
         .from("followups")
         .select("*")
         .eq("lead_id", leadId)
@@ -42,7 +46,7 @@ export function useCreateFollowup() {
 
   return useMutation({
     mutationFn: async (fup: { lead_id: string; user_id: string; fecha_programada: string }) => {
-      const { data, error } = await supabase
+      const { data, error } = await getSupabase()
         .from("followups")
         .insert(fup)
         .select()
@@ -62,7 +66,7 @@ export function useBulkCreateFollowups() {
 
   return useMutation({
     mutationFn: async (fups: { lead_id: string; user_id: string; fecha_programada: string }[]) => {
-      const { data, error } = await supabase
+      const { data, error } = await getSupabase()
         .from("followups")
         .insert(fups)
         .select();
@@ -81,7 +85,7 @@ export function useCompleteFollowup() {
 
   return useMutation({
     mutationFn: async ({ id, completado }: { id: string; completado: boolean }) => {
-      const { data, error } = await supabase
+      const { data, error } = await getSupabase()
         .from("followups")
         .update({
           completado,
@@ -132,7 +136,7 @@ export function useDeleteFollowup() {
 
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("followups").delete().eq("id", id);
+      const { error } = await getSupabase().from("followups").delete().eq("id", id);
       if (error) throw error;
     },
     onMutate: async (id) => {

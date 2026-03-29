@@ -2,13 +2,17 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import type { Interaction } from "@/types/database";
 
-const supabase = createClient();
+let _supabase: ReturnType<typeof createClient>;
+function getSupabase() {
+  if (!_supabase) _supabase = createClient();
+  return _supabase;
+}
 
 export function useInteractions(leadId: string) {
   return useQuery({
     queryKey: ["interactions", leadId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await getSupabase()
         .from("interactions")
         .select("*, user:users(*)")
         .eq("lead_id", leadId)
@@ -27,7 +31,7 @@ export function useCreateInteraction() {
     mutationFn: async (
       interaction: Omit<Interaction, "id" | "created_at" | "user">
     ) => {
-      const { data, error } = await supabase
+      const { data, error } = await getSupabase()
         .from("interactions")
         .insert(interaction)
         .select()
@@ -51,7 +55,7 @@ export function useBulkCreateInteractions() {
     mutationFn: async (
       interactions: Omit<Interaction, "id" | "created_at" | "user">[]
     ) => {
-      const { data, error } = await supabase
+      const { data, error } = await getSupabase()
         .from("interactions")
         .insert(interactions)
         .select();

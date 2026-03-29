@@ -1,7 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 
-const supabase = createClient();
+let _supabase: ReturnType<typeof createClient>;
+function getSupabase() {
+  if (!_supabase) _supabase = createClient();
+  return _supabase;
+}
 
 export interface Template {
   id: string;
@@ -28,7 +32,7 @@ export function useTemplates() {
   return useQuery({
     queryKey: ["templates"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await getSupabase()
         .from("templates")
         .select("*")
         .order("created_at", { ascending: true });
@@ -43,7 +47,7 @@ export function useCreateTemplate() {
 
   return useMutation({
     mutationFn: async (template: { user_id: string; nombre: string; contenido: string }) => {
-      const { data, error } = await supabase
+      const { data, error } = await getSupabase()
         .from("templates")
         .insert(template)
         .select()
@@ -62,7 +66,7 @@ export function useUpdateTemplate() {
 
   return useMutation({
     mutationFn: async ({ id, ...updates }: { id: string; nombre?: string; contenido?: string }) => {
-      const { data, error } = await supabase
+      const { data, error } = await getSupabase()
         .from("templates")
         .update(updates)
         .eq("id", id)
@@ -82,7 +86,7 @@ export function useDeleteTemplate() {
 
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
+      const { error } = await getSupabase()
         .from("templates")
         .delete()
         .eq("id", id);

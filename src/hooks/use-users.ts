@@ -2,7 +2,11 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import type { User } from "@/types/database";
 
-const supabase = createClient();
+let _supabase: ReturnType<typeof createClient>;
+function getSupabase() {
+  if (!_supabase) _supabase = createClient();
+  return _supabase;
+}
 
 export function useCurrentUser() {
   return useQuery({
@@ -10,10 +14,10 @@ export function useCurrentUser() {
     queryFn: async () => {
       const {
         data: { user: authUser },
-      } = await supabase.auth.getUser();
+      } = await getSupabase().auth.getUser();
       if (!authUser) return null;
 
-      const { data, error } = await supabase
+      const { data, error } = await getSupabase()
         .from("users")
         .select("*")
         .eq("id", authUser.id)
@@ -29,7 +33,7 @@ export function useClosers() {
   return useQuery({
     queryKey: ["closers"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await getSupabase()
         .from("users")
         .select("*")
         .eq("role", "closer")
@@ -44,7 +48,7 @@ export function useTeam() {
   return useQuery({
     queryKey: ["team"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await getSupabase()
         .from("users")
         .select("*")
         .order("created_at", { ascending: false });
@@ -60,7 +64,7 @@ export function useUpdateProfile() {
   return useMutation({
     mutationFn: async (updates: { id: string; full_name?: string; avatar_url?: string | null }) => {
       const { id, ...fields } = updates;
-      const { data, error } = await supabase
+      const { data, error } = await getSupabase()
         .from("users")
         .update(fields)
         .eq("id", id)
@@ -81,7 +85,7 @@ export function useUpdateUserRole() {
 
   return useMutation({
     mutationFn: async ({ id, role }: { id: string; role: string }) => {
-      const { data, error } = await supabase
+      const { data, error } = await getSupabase()
         .from("users")
         .update({ role })
         .eq("id", id)

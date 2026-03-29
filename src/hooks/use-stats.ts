@@ -2,7 +2,11 @@ import { useQuery } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import type { DailyKPI } from "@/types/database";
 
-const supabase = createClient();
+let _supabase: ReturnType<typeof createClient>;
+function getSupabase() {
+  if (!_supabase) _supabase = createClient();
+  return _supabase;
+}
 
 export const CASH_PER_AGENDA = 32;
 
@@ -41,32 +45,32 @@ export function useStats(fecha: string) {
         { count: activos },
       ] = await Promise.all([
         // Inbound nuevo: leads creados ese día
-        supabase
+        getSupabase()
           .from("leads")
           .select("*", { count: "exact", head: true })
           .gte("created_at", startOfDay)
           .lte("created_at", endOfDay),
         // FUPs programados para ese día
-        supabase
+        getSupabase()
           .from("followups")
           .select("*", { count: "exact", head: true })
           .eq("fecha_programada", fecha),
         // Calendarios enviados
-        supabase
+        getSupabase()
           .from("interactions")
           .select("*", { count: "exact", head: true })
           .eq("tipo", "calendario_enviado")
           .gte("created_at", startOfDay)
           .lte("created_at", endOfDay),
         // Calls agendadas
-        supabase
+        getSupabase()
           .from("leads")
           .select("*", { count: "exact", head: true })
           .not("fecha_call", "is", null)
           .gte("fecha_call", startOfDay)
           .lte("fecha_call", endOfDay),
         // Total leads activos
-        supabase
+        getSupabase()
           .from("leads")
           .select("*", { count: "exact", head: true })
           .in("estado", ["nuevo", "seguimiento"]),
@@ -107,26 +111,26 @@ export function useKPIHistory(days = 7) {
         { data: agendaLeads },
       ] = await Promise.all([
         // Leads in range
-        supabase
+        getSupabase()
           .from("leads")
           .select("id, created_at, fecha_call")
           .gte("created_at", rangeStart)
           .lte("created_at", rangeEnd),
         // Followups in range
-        supabase
+        getSupabase()
           .from("followups")
           .select("fecha_programada")
           .gte("fecha_programada", dates[0])
           .lte("fecha_programada", dates[dates.length - 1]),
         // Interactions in range (for calendarios)
-        supabase
+        getSupabase()
           .from("interactions")
           .select("tipo, created_at")
           .eq("tipo", "calendario_enviado")
           .gte("created_at", rangeStart)
           .lte("created_at", rangeEnd),
         // Calls agendadas
-        supabase
+        getSupabase()
           .from("leads")
           .select("id, fecha_call")
           .not("fecha_call", "is", null)
@@ -139,21 +143,21 @@ export function useKPIHistory(days = 7) {
         const dayEnd = `${fecha}T23:59:59`;
 
         const inbound = (leads ?? []).filter(
-          (l) => l.created_at >= dayStart && l.created_at <= dayEnd
+          (l: { created_at: string }) => l.created_at >= dayStart && l.created_at <= dayEnd
         ).length;
 
         const fups = (followupsData ?? []).filter(
-          (f) => f.fecha_programada === fecha
+          (f: { fecha_programada: string }) => f.fecha_programada === fecha
         ).length;
 
         const calEnviados = (interactions ?? []).filter(
-          (i) =>
+          (i: { created_at: string }) =>
             i.created_at >= dayStart &&
             i.created_at <= dayEnd
         ).length;
 
         const callsAgendadas = (agendaLeads ?? []).filter(
-          (l) => l.fecha_call! >= dayStart && l.fecha_call! <= dayEnd
+          (l: { fecha_call: string | null }) => l.fecha_call! >= dayStart && l.fecha_call! <= dayEnd
         ).length;
 
         return buildKPI(fecha, inbound, fups, calEnviados, callsAgendadas);

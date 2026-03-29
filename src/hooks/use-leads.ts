@@ -2,7 +2,11 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import type { Lead, LeadEstado } from "@/types/database";
 
-const supabase = createClient();
+let _supabase: ReturnType<typeof createClient>;
+function getSupabase() {
+  if (!_supabase) _supabase = createClient();
+  return _supabase;
+}
 
 // --- Queries ---
 
@@ -10,7 +14,7 @@ export function useLeads(filtroEstado?: LeadEstado | "todos") {
   return useQuery({
     queryKey: ["leads", filtroEstado],
     queryFn: async () => {
-      let query = supabase
+      let query = getSupabase()
         .from("leads")
         .select("*, closer:users!leads_closer_id_fkey(*), setter:users!leads_setter_id_fkey(*)")
         .order("created_at", { ascending: false });
@@ -30,7 +34,7 @@ export function useLead(id: string) {
   return useQuery({
     queryKey: ["lead", id],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await getSupabase()
         .from("leads")
         .select("*, closer:users!leads_closer_id_fkey(*), setter:users!leads_setter_id_fkey(*)")
         .eq("id", id)
@@ -49,7 +53,7 @@ export function useFollowUps(fecha: string) {
       const startOfDay = `${fecha}T00:00:00`;
       const endOfDay = `${fecha}T23:59:59`;
 
-      const { data, error } = await supabase
+      const { data, error } = await getSupabase()
         .from("leads")
         .select("*, closer:users!leads_closer_id_fkey(*)")
         .eq("estado", "seguimiento")
@@ -72,7 +76,7 @@ export function useCreateLead() {
     mutationFn: async (lead: { nombre: string; setter_id: string; created_at?: string }) => {
       // Check for duplicate by nombre (case-insensitive)
       const normalized = lead.nombre.trim();
-      const { data: existing } = await supabase
+      const { data: existing } = await getSupabase()
         .from("leads")
         .select("id, nombre")
         .ilike("nombre", normalized)
@@ -87,7 +91,7 @@ export function useCreateLead() {
         estado: "nuevo",
       };
       if (lead.created_at) row.created_at = lead.created_at;
-      const { data, error } = await supabase
+      const { data, error } = await getSupabase()
         .from("leads")
         .insert(row)
         .select()
@@ -119,7 +123,7 @@ export function useBulkCreateLeads() {
       // 2. Check which names already exist in DB (case-insensitive)
       const names = unique.map((l) => l.nombre.trim());
       const orFilter = names.map((n) => `nombre.ilike.${n}`).join(",");
-      const { data: existing } = await supabase
+      const { data: existing } = await getSupabase()
         .from("leads")
         .select("nombre")
         .or(orFilter);
@@ -147,7 +151,7 @@ export function useBulkCreateLeads() {
         if (l.created_at) row.created_at = l.created_at;
         return row;
       });
-      const { data, error } = await supabase
+      const { data, error } = await getSupabase()
         .from("leads")
         .insert(rows)
         .select();
@@ -169,7 +173,7 @@ export function useUpdateLead() {
       id,
       ...updates
     }: Partial<Lead> & { id: string }) => {
-      const { data, error } = await supabase
+      const { data, error } = await getSupabase()
         .from("leads")
         .update(updates)
         .eq("id", id)
@@ -198,7 +202,7 @@ export function useBulkUpdateLeads() {
       ids: string[];
       updates: Partial<Pick<Lead, "estado" | "closer_id" | "created_at" | "fecha_call">>;
     }) => {
-      const { data, error } = await supabase
+      const { data, error } = await getSupabase()
         .from("leads")
         .update(updates)
         .in("id", ids)
@@ -219,7 +223,7 @@ export function useBulkDeleteLeads() {
 
   return useMutation({
     mutationFn: async (ids: string[]) => {
-      const { error } = await supabase
+      const { error } = await getSupabase()
         .from("leads")
         .delete()
         .in("id", ids);
