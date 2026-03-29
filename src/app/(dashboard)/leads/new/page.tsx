@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { toast } from "sonner";
+import { showLeadAddedToast } from "@/components/lead-added-toast";
 import { HiOutlineArrowLeft, HiOutlineUserPlus, HiOutlineUsers } from "react-icons/hi2";
 import Link from "next/link";
 
@@ -48,8 +49,14 @@ export default function NewLeadPage() {
         created_at: createdAt,
       },
       {
-        onSuccess: () => {
-          toast.success("Lead cargado correctamente");
+        onSuccess: (data) => {
+          const leadId = data?.id;
+          showLeadAddedToast({
+            nombre: nombre.trim(),
+            fecha,
+            onVerLead: leadId ? () => router.push(`/leads/${leadId}`) : undefined,
+            onAgregarNota: leadId ? () => router.push(`/leads/${leadId}`) : undefined,
+          });
           router.push("/leads");
         },
         onError: (err) => {
@@ -93,7 +100,12 @@ export default function NewLeadPage() {
             `${created.length} cargados. ${duplicates.length} duplicado${duplicates.length !== 1 ? "s" : ""} omitido${duplicates.length !== 1 ? "s" : ""}: ${duplicates.slice(0, 5).join(", ")}${duplicates.length > 5 ? "..." : ""}`
           );
         } else {
-          toast.success(`${created.length} leads cargados correctamente`);
+          showLeadAddedToast({
+            nombre: created.length === 1 ? created[0].nombre : `${created.length} leads`,
+            fecha,
+            cantidad: created.length,
+            onVerLead: created.length === 1 ? () => router.push(`/leads/${created[0].id}`) : undefined,
+          });
         }
         router.push("/leads");
       },
