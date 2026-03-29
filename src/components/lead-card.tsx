@@ -21,9 +21,10 @@ interface LeadCardProps {
   selectable?: boolean;
   selected?: boolean;
   onToggle?: (id: string) => void;
+  lastNote?: { contenido: string; tipo: string; created_at: string };
 }
 
-export const LeadCard = memo(function LeadCardInner({ lead, selectable, selected, onToggle }: LeadCardProps) {
+export const LeadCard = memo(function LeadCardInner({ lead, selectable, selected, onToggle, lastNote }: LeadCardProps) {
   const router = useRouter();
 
   const fechaCall = lead.fecha_call
@@ -151,6 +152,20 @@ export const LeadCard = memo(function LeadCardInner({ lead, selectable, selected
               </div>
             )}
           </div>
+
+          {/* Última nota — visible en desktop */}
+          {lastNote && (
+            <div className="hidden lg:flex items-start gap-2 shrink-0 max-w-[280px] xl:max-w-[360px] border-l pl-3 ml-1">
+              <HiOutlineChatBubbleBottomCenterText className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-0.5" />
+              <div className="min-w-0">
+                <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">{lastNote.contenido}</p>
+                <p className="text-[10px] text-muted-foreground/60 mt-0.5">
+                  {new Date(lastNote.created_at).toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" })}{" · "}
+                  {new Date(lastNote.created_at).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}
+                </p>
+              </div>
+            </div>
+          )}
 
           <HiOutlineChevronRight className="h-4 w-4 text-muted-foreground shrink-0 mt-1 opacity-0 group-hover:opacity-100 transition-opacity" />
         </div>

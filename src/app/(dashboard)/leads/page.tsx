@@ -102,16 +102,24 @@ export default function LeadsPage() {
   const bulkInteractions = useBulkCreateInteractions();
   const bulkFollowups = useBulkCreateFollowups();
 
-  // IDs de leads que tienen historial (interactions)
-  const { data: leadIdsConHistorial } = useQuery({
-    queryKey: ["leads-con-historial"],
+  // Última interacción por lead (para filtro "con notas" y preview en card)
+  const { data: interactionsMap } = useQuery({
+    queryKey: ["leads-last-interactions"],
     queryFn: async () => {
       const supabase = createClient();
       const { data, error } = await supabase
         .from("interactions")
-        .select("lead_id");
+        .select("lead_id, contenido, tipo, created_at")
+        .order("created_at", { ascending: false });
       if (error) throw error;
-      return new Set((data ?? []).map((r) => r.lead_id));
+      // Mapa: lead_id → última interacción (la primera por orden desc)
+      const map = new Map<string, { contenido: string; tipo: string; created_at: string }>();
+      for (const row of data ?? []) {
+        if (!map.has(row.lead_id)) {
+          map.set(row.lead_id, { contenido: row.contenido, tipo: row.tipo, created_at: row.created_at });
+        }
+      }
+      return map;
     },
     staleTime: 60_000,
   });
@@ -157,11 +165,11 @@ export default function LeadsPage() {
         result = result.filter((l) => l.created_at.slice(0, 10) === dateFilter);
       }
     }
-    if (soloConNotas && leadIdsConHistorial) {
-      result = result.filter((l) => leadIdsConHistorial.has(l.id));
+    if (soloConNotas && interactionsMap) {
+      result = result.filter((l) => interactionsMap.has(l.id));
     }
     return result;
-  }, [leads, search, dateFilter, soloConNotas, leadIdsConHistorial]);
+  }, [leads, search, dateFilter, soloConNotas, interactionsMap]);
 
   const grouped = useMemo(() => groupByDate(filteredLeads), [filteredLeads]);
 
@@ -725,6 +733,7 @@ export default function LeadsPage() {
                     selectable={selectMode}
                     selected={selected.has(lead.id)}
                     onToggle={toggleSelect}
+                    lastNote={interactionsMap?.get(lead.id)}
                   />
                 ))}
               </div>
