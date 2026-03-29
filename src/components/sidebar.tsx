@@ -21,7 +21,6 @@ import { useRouter } from "next/navigation";
 const navigation = [
   { name: "Dashboard", href: "/", icon: HiOutlineSquares2X2 },
   { name: "Leads", href: "/leads", icon: HiOutlineUsers },
-  { name: "Nuevo Lead", href: "/leads/new", icon: HiOutlineUserPlus },
   { name: "Configuración", href: "/settings", icon: HiOutlineCog6Tooth },
 ];
 
@@ -99,6 +98,17 @@ export function Sidebar() {
               {item.name}
             </Link>
           ))}
+          <button
+            type="button"
+            onClick={() => {
+              useUIStore.getState().setQuickAddOpen(true);
+              setSidebarOpen(false);
+            }}
+            className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 text-muted-foreground hover:bg-accent hover:text-accent-foreground cursor-pointer"
+          >
+            <HiOutlineUserPlus className="h-[18px] w-[18px]" />
+            Nuevo Lead
+          </button>
         </nav>
 
         {/* Logout */}

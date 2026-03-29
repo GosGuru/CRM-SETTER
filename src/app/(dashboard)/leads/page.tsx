@@ -41,7 +41,6 @@ import {
   HiOutlineClock,
   HiOutlineClipboardDocumentCheck,
 } from "react-icons/hi2";
-import Link from "next/link";
 import type { Lead, LeadEstado } from "@/types/database";
 import { toast } from "sonner";
 
@@ -386,12 +385,10 @@ export default function LeadsPage() {
                 Seleccionar
               </Button>
               <CSVUpload />
-              <Link href="/leads/new">
-                <Button className="cursor-pointer">
-                  <HiOutlinePlusCircle className="mr-2 h-4 w-4" />
-                  Nuevo Lead
-                </Button>
-              </Link>
+              <Button className="cursor-pointer" onClick={() => useUIStore.getState().setQuickAddOpen(true)}>
+                <HiOutlinePlusCircle className="mr-2 h-4 w-4" />
+                Nuevo Lead
+              </Button>
             </>
           ) : (
             <Button
