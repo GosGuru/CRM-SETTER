@@ -1,0 +1,234 @@
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { createClient } from "@/lib/supabase/client";
+import type { Lead, LeadEstado } from "@/types/database";
+
+const supabase = createClient();
+
+// --- Queries ---
+
+export function useLeads(filtroEstado?: LeadEstado | "todos") {
+  return useQuery({
+    queryKey: ["leads", filtroEstado],
+    queryFn: async () => {
+      let query = supabase
+        .from("leads")
+        .select("*, closer:users!leads_closer_id_fkey(*), setter:users!leads_setter_id_fkey(*)")
+        .order("created_at", { ascending: false });
+
+      if (filtroEstado && filtroEstado !== "todos") {
+        query = query.eq("estado", filtroEstado);
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+      return data as Lead[];
+    },
+  });
+}
+
+export function useLead(id: string) {
+  return useQuery({
+    queryKey: ["lead", id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("leads")
+        .select("*, closer:users!leads_closer_id_fkey(*), setter:users!leads_setter_id_fkey(*)")
+        .eq("id", id)
+        .single();
+      if (error) throw error;
+      return data as Lead;
+    },
+    enabled: !!id,
+  });
+}
+
+export function useFollowUps(fecha: string) {
+  return useQuery({
+    queryKey: ["followups", fecha],
+    queryFn: async () => {
+      const startOfDay = `${fecha}T00:00:00`;
+      const endOfDay = `${fecha}T23:59:59`;
+
+      const { data, error } = await supabase
+        .from("leads")
+        .select("*, closer:users!leads_closer_id_fkey(*)")
+        .eq("estado", "seguimiento")
+        .gte("fecha_call", startOfDay)
+        .lte("fecha_call", endOfDay)
+        .order("fecha_call", { ascending: true });
+
+      if (error) throw error;
+      return data as Lead[];
+    },
+  });
+}
+
+// --- Mutations ---
+
+export function useCreateLead() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (lead: { nombre: string; setter_id: string; created_at?: string }) => {
+      // Check for duplicate by nombre (case-insensitive)
+      const normalized = lead.nombre.trim();
+      const { data: existing } = await supabase
+        .from("leads")
+        .select("id, nombre")
+        .ilike("nombre", normalized)
+        .limit(1);
+      if (existing && existing.length > 0) {
+        throw new Error(`Ya existe un lead con el nombre "${existing[0].nombre}"`);
+      }
+
+      const row: Record<string, unknown> = {
+        nombre: normalized,
+        setter_id: lead.setter_id,
+        estado: "nuevo",
+      };
+      if (lead.created_at) row.created_at = lead.created_at;
+      const { data, error } = await supabase
+        .from("leads")
+        .insert(row)
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["leads"] });
+      queryClient.invalidateQueries({ queryKey: ["stats"] });
+    },
+  });
+}
+
+export function useBulkCreateLeads() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (leads: { nombre: string; setter_id: string; created_at?: string }[]) => {
+      // 1. Dedupe within the batch (case-insensitive)
+      const seen = new Set<string>();
+      const unique = leads.filter((l) => {
+        const key = l.nombre.trim().toLowerCase();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+
+      // 2. Check which names already exist in DB (case-insensitive)
+      const names = unique.map((l) => l.nombre.trim());
+      const orFilter = names.map((n) => `nombre.ilike.${n}`).join(",");
+      const { data: existing } = await supabase
+        .from("leads")
+        .select("nombre")
+        .or(orFilter);
+      const existingLower = new Set(
+        (existing ?? []).map((l: { nombre: string }) => l.nombre.trim().toLowerCase())
+      );
+
+      const duplicates = unique.filter((l) => existingLower.has(l.nombre.trim().toLowerCase()));
+      const toInsert = unique.filter((l) => !existingLower.has(l.nombre.trim().toLowerCase()));
+
+      if (toInsert.length === 0) {
+        throw new Error(
+          duplicates.length === 1
+            ? `El lead "${duplicates[0].nombre}" ya existe`
+            : `Los ${duplicates.length} leads ya existen en el sistema`
+        );
+      }
+
+      const rows = toInsert.map((l) => {
+        const row: Record<string, unknown> = {
+          nombre: l.nombre.trim(),
+          setter_id: l.setter_id,
+          estado: "nuevo",
+        };
+        if (l.created_at) row.created_at = l.created_at;
+        return row;
+      });
+      const { data, error } = await supabase
+        .from("leads")
+        .insert(rows)
+        .select();
+      if (error) throw error;
+      return { created: data as Lead[], duplicates: duplicates.map((d) => d.nombre) };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["leads"] });
+      queryClient.invalidateQueries({ queryKey: ["stats"] });
+    },
+  });
+}
+
+export function useUpdateLead() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      id,
+      ...updates
+    }: Partial<Lead> & { id: string }) => {
+      const { data, error } = await supabase
+        .from("leads")
+        .update(updates)
+        .eq("id", id)
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["leads"] });
+      queryClient.invalidateQueries({ queryKey: ["lead", variables.id] });
+      queryClient.invalidateQueries({ queryKey: ["stats"] });
+      queryClient.invalidateQueries({ queryKey: ["followups"] });
+    },
+  });
+}
+
+export function useBulkUpdateLeads() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      ids,
+      updates,
+    }: {
+      ids: string[];
+      updates: Partial<Pick<Lead, "estado" | "closer_id" | "created_at" | "fecha_call">>;
+    }) => {
+      const { data, error } = await supabase
+        .from("leads")
+        .update(updates)
+        .in("id", ids)
+        .select();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["leads"] });
+      queryClient.invalidateQueries({ queryKey: ["stats"] });
+      queryClient.invalidateQueries({ queryKey: ["followups"] });
+    },
+  });
+}
+
+export function useBulkDeleteLeads() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (ids: string[]) => {
+      const { error } = await supabase
+        .from("leads")
+        .delete()
+        .in("id", ids);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["leads"] });
+      queryClient.invalidateQueries({ queryKey: ["stats"] });
+      queryClient.invalidateQueries({ queryKey: ["followups"] });
+    },
+  });
+}

@@ -128,3 +128,72 @@
     @apply font-sans;
   }
 }
+
+/* ─── Subtle blur-in animations ─── */
+@keyframes blur-in {
+  0% {
+    opacity: 0;
+    filter: blur(8px);
+    transform: translateY(6px);
+  }
+  100% {
+    opacity: 1;
+    filter: blur(0);
+    transform: translateY(0);
+  }
+}
+
+@keyframes blur-in-scale {
+  0% {
+    opacity: 0;
+    filter: blur(6px);
+    transform: scale(0.97);
+  }
+  100% {
+    opacity: 1;
+    filter: blur(0);
+    transform: scale(1);
+  }
+}
+
+@keyframes blur-fade {
+  0% {
+    opacity: 0;
+    filter: blur(4px);
+  }
+  100% {
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+
+.animate-blur-in {
+  animation: blur-in 0.4s ease-out both;
+}
+
+.animate-blur-in-scale {
+  animation: blur-in-scale 0.35s ease-out both;
+}
+
+.animate-blur-fade {
+  animation: blur-fade 0.3s ease-out both;
+}
+
+/* Staggered delays for children */
+.stagger-1 { animation-delay: 0.04s; }
+.stagger-2 { animation-delay: 0.08s; }
+.stagger-3 { animation-delay: 0.12s; }
+.stagger-4 { animation-delay: 0.16s; }
+.stagger-5 { animation-delay: 0.20s; }
+.stagger-6 { animation-delay: 0.24s; }
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-blur-in,
+  .animate-blur-in-scale,
+  .animate-blur-fade {
+    animation: none !important;
+    opacity: 1 !important;
+    filter: none !important;
+    transform: none !important;
+  }
+}
