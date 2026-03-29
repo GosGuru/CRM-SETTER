@@ -200,7 +200,7 @@ export function useBulkUpdateLeads() {
       updates,
     }: {
       ids: string[];
-      updates: Partial<Pick<Lead, "estado" | "closer_id" | "created_at" | "fecha_call">>;
+      updates: Partial<Pick<Lead, "estado" | "closer_id" | "created_at" | "fecha_call" | "fecha_call_set_at">>;
     }) => {
       const { data, error } = await getSupabase()
         .from("leads")

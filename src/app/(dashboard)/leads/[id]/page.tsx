@@ -104,7 +104,7 @@ export default function LeadDetailPage({
       date.getFullYear(), date.getMonth(), date.getDate(), 12, 0, 0
     ).toISOString();
     updateLead.mutate(
-      { id: lead.id, estado: "seguimiento", fecha_call: fechaCall },
+      { id: lead.id, estado: "seguimiento", fecha_call: fechaCall, fecha_call_set_at: new Date().toISOString() },
       {
         onSuccess: () => {
           createInteraction.mutate({

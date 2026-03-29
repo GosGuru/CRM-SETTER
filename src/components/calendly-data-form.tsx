@@ -110,6 +110,7 @@ export function CalendlyDataForm({ lead }: { lead: Lead }) {
         edad: form.edad ? Number(form.edad) : null,
         trabajo: form.trabajo.trim() || null,
         fecha_call: fechaFinal.toISOString(),
+        fecha_call_set_at: new Date().toISOString(),
         closer_id: form.closer_id || null,
         respuestas: form.respuestas.trim() || null,
         estado: "seguimiento",

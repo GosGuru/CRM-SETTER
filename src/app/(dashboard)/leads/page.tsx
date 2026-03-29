@@ -40,7 +40,10 @@ import {
   HiOutlineBanknotes,
   HiOutlineClock,
   HiOutlineClipboardDocumentCheck,
+  HiOutlineBarsArrowDown,
+  HiOutlineBarsArrowUp,
 } from "react-icons/hi2";
+import { ArrowDownAZ, ArrowUpZA, ListFilter, Star } from "lucide-react";
 import type { Lead, LeadEstado } from "@/types/database";
 import { toast } from "sonner";
 
@@ -58,6 +61,32 @@ const estadoOptions: { value: LeadEstado; label: string }[] = [
   { value: "cerrado", label: "Cerrado" },
   { value: "pagó", label: "Pagó" },
 ];
+
+type SortOption = "recientes" | "antiguos" | "az" | "za" | "calificados";
+
+const sortOptions: { value: SortOption; label: string; icon: React.ReactNode }[] = [
+  { value: "recientes", label: "Recientes", icon: <HiOutlineBarsArrowDown className="h-3.5 w-3.5" /> },
+  { value: "antiguos", label: "Antiguos", icon: <HiOutlineBarsArrowUp className="h-3.5 w-3.5" /> },
+  { value: "az", label: "A → Z", icon: <ArrowDownAZ className="h-3.5 w-3.5" /> },
+  { value: "za", label: "Z → A", icon: <ArrowUpZA className="h-3.5 w-3.5" /> },
+  { value: "calificados", label: "Calificados", icon: <Star className="h-3.5 w-3.5" /> },
+];
+
+function qualificationScore(lead: Lead): number {
+  let score = 0;
+  if (lead.celular) score++;
+  if (lead.email) score++;
+  if (lead.edad) score++;
+  if (lead.trabajo) score++;
+  if (lead.instagram) score++;
+  if (lead.respuestas) score++;
+  if (lead.objetivo) score++;
+  if (lead.decisor) score++;
+  if (lead.inversion_ok) score++;
+  if (lead.compromiso) score++;
+  if (lead.fecha_call) score += 2;
+  return score;
+}
 
 function groupByDate(leads: Lead[]): { date: string; label: string; leads: Lead[] }[] {
   const groups = new Map<string, Lead[]>();
@@ -133,6 +162,7 @@ export default function LeadsPage() {
   const [filterDateOpen, setFilterDateOpen] = useState(false);
   const [customDate, setCustomDate] = useState<Date | null>(null);
   const [soloConNotas, setSoloConNotas] = useState(false);
+  const [sortBy, setSortBy] = useState<SortOption>("recientes");
 
   const filteredLeads = useMemo(() => {
     if (!leads) return [];
@@ -170,7 +200,26 @@ export default function LeadsPage() {
     return result;
   }, [leads, search, dateFilter, soloConNotas, interactionsMap]);
 
-  const grouped = useMemo(() => groupByDate(filteredLeads), [filteredLeads]);
+  const sortedLeads = useMemo(() => {
+    const sorted = [...filteredLeads];
+    switch (sortBy) {
+      case "recientes":
+        return sorted.sort((a, b) => b.created_at.localeCompare(a.created_at));
+      case "antiguos":
+        return sorted.sort((a, b) => a.created_at.localeCompare(b.created_at));
+      case "az":
+        return sorted.sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+      case "za":
+        return sorted.sort((a, b) => b.nombre.localeCompare(a.nombre, "es"));
+      case "calificados":
+        return sorted.sort((a, b) => qualificationScore(b) - qualificationScore(a));
+      default:
+        return sorted;
+    }
+  }, [filteredLeads, sortBy]);
+
+  const useDateGrouping = sortBy === "recientes" || sortBy === "antiguos";
+  const grouped = useMemo(() => useDateGrouping ? groupByDate(sortedLeads) : [], [sortedLeads, useDateGrouping]);
 
   const toggleSelect = (id: string) => {
     setSelected((prev) => {
@@ -265,7 +314,7 @@ export default function LeadsPage() {
       date.getFullYear(), date.getMonth(), date.getDate(), 12, 0, 0
     ).toISOString();
     bulkUpdate.mutate(
-      { ids: [...selected], updates: { estado: "seguimiento", fecha_call: fechaCall } },
+      { ids: [...selected], updates: { estado: "seguimiento", fecha_call: fechaCall, fecha_call_set_at: new Date().toISOString() } },
       {
         onSuccess: () => {
           const label = date.toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long" });
@@ -687,16 +736,36 @@ export default function LeadsPage() {
             </PopoverContent>
           </Popover>
         </div>
+
+        {/* Ordenamiento */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="text-xs text-muted-foreground flex items-center gap-1 mr-1">
+            <ListFilter className="h-3.5 w-3.5" />
+            Ordenar:
+          </span>
+          {sortOptions.map((opt) => (
+            <Button
+              key={opt.value}
+              variant={sortBy === opt.value ? "default" : "outline"}
+              size="sm"
+              onClick={() => setSortBy(opt.value)}
+              className="cursor-pointer h-7 text-xs rounded-full px-3 gap-1.5"
+            >
+              {opt.icon}
+              {opt.label}
+            </Button>
+          ))}
+        </div>
       </div>
 
-      {/* Lista de leads agrupada por fecha */}
+      {/* Lista de leads */}
       {isLoading ? (
         <div className="space-y-2">
           {[1, 2, 3, 4, 5].map((i) => (
             <div key={i} className="h-16 rounded-lg bg-muted animate-pulse" />
           ))}
         </div>
-      ) : grouped.length > 0 ? (
+      ) : useDateGrouping && grouped.length > 0 ? (
         <div className="space-y-6">
           {grouped.map(({ date, label, leads: dateLeads }) => (
             <div key={date}>
@@ -736,6 +805,44 @@ export default function LeadsPage() {
               </div>
             </div>
           ))}
+        </div>
+      ) : !useDateGrouping && sortedLeads.length > 0 ? (
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <Badge variant="outline" className="text-xs">
+              {sortedLeads.length} leads
+            </Badge>
+            {selectMode && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setSelected((prev) => {
+                    const allSelected = sortedLeads.every((l) => prev.has(l.id));
+                    if (allSelected) return new Set();
+                    return new Set(sortedLeads.map((l) => l.id));
+                  });
+                }}
+                className="text-xs h-7 cursor-pointer"
+              >
+                {sortedLeads.every((l) => selected.has(l.id))
+                  ? "Deseleccionar todos"
+                  : "Seleccionar todos"}
+              </Button>
+            )}
+          </div>
+          <div className="space-y-1.5">
+            {sortedLeads.map((lead) => (
+              <LeadCard
+                key={lead.id}
+                lead={lead}
+                selectable={selectMode}
+                selected={selected.has(lead.id)}
+                onToggle={toggleSelect}
+                lastNote={interactionsMap?.get(lead.id)}
+              />
+            ))}
+          </div>
         </div>
       ) : (
         <Card>

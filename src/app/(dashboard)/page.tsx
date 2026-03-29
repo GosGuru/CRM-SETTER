@@ -1,9 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { LeadCard } from "@/components/lead-card";
 import { FupCard } from "@/components/fup-card";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -14,12 +14,25 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { useFollowUps } from "@/hooks/use-leads";
 import { useFollowups, useCompleteFollowup, useDeleteFollowup } from "@/hooks/use-followups";
 import { useStats, useKPIHistory, CASH_PER_AGENDA } from "@/hooks/use-stats";
 import { useCurrentUser } from "@/hooks/use-users";
 import { useUIStore } from "@/stores/ui-store";
 import { toast } from "sonner";
+import { es } from "date-fns/locale";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+} from "recharts";
 import {
   HiOutlineUserPlus,
   HiOutlinePhoneArrowUpRight,
@@ -30,9 +43,10 @@ import {
   HiOutlineChevronLeft,
   HiOutlineChevronRight,
   HiOutlineBellAlert,
-  HiOutlineSparkles,
+  HiOutlineClipboardDocumentList,
   HiOutlineClipboardDocumentCheck,
 } from "react-icons/hi2";
+import { CalendarIcon } from "lucide-react";
 
 function StatCard({
   title,
@@ -91,6 +105,7 @@ export default function DashboardPage() {
   const completeFup = useCompleteFollowup();
   const deleteFup = useDeleteFollowup();
   const { data: currentUser } = useCurrentUser();
+  const [calendarOpen, setCalendarOpen] = useState(false);
 
   const fupsCompletados = fups?.filter((f) => f.completado).length ?? 0;
   const fupsTotal = fups?.length ?? 0;
@@ -116,13 +131,24 @@ export default function DashboardPage() {
       ? Math.round((totals.calls / totals.inbound) * 100)
       : 0;
 
+  // Data para el chart
+  const chartData = kpiHistory?.map((row) => ({
+    fecha: formatFecha(row.fecha),
+    Inbound: row.inbound_nuevo,
+    FUPs: row.fups,
+    "Cal. Env.": row.calendarios_enviados,
+    Agendadas: row.calls_agendadas,
+  }));
+
+  const selectedDate = new Date(fecha + "T12:00:00");
+
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 animate-blur-fade">
         <div>
           <div className="flex items-center gap-3">
-            <HiOutlineSparkles className="h-6 w-6 text-primary" />
+            <HiOutlineClipboardDocumentList className="h-6 w-6 text-primary" />
             <h1 className="text-2xl font-bold">Dashboard</h1>
             {currentUser && (
               <Badge variant="secondary" className="text-xs">
@@ -154,12 +180,34 @@ export default function DashboardPage() {
           >
             <HiOutlineChevronLeft className="h-4 w-4" />
           </Button>
-          <Input
-            type="date"
-            value={fecha}
-            onChange={(e) => setFecha(e.target.value)}
-            className="w-auto h-9"
-          />
+          <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+            <PopoverTrigger
+              render={
+                <Button variant="outline" className="h-9 w-auto min-w-45 justify-start text-left font-normal cursor-pointer">
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {new Date(fecha + "T12:00:00").toLocaleDateString("es-AR", {
+                    day: "numeric",
+                    month: "long",
+                    year: "numeric",
+                  })}
+                </Button>
+              }
+            />
+            <PopoverContent align="end" className="w-auto p-0">
+              <Calendar
+                mode="single"
+                selected={selectedDate}
+                onSelect={(day) => {
+                  if (day) {
+                    setFecha(day.toISOString().slice(0, 10));
+                    setCalendarOpen(false);
+                  }
+                }}
+                locale={es}
+                defaultMonth={selectedDate}
+              />
+            </PopoverContent>
+          </Popover>
           <Button
             variant="outline"
             size="icon"
@@ -236,57 +284,105 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Tabla KPI últimos 7 días */}
+      {/* Tabla KPI del día */}
+      <Card className="animate-blur-in stagger-2">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-lg flex items-center gap-2">
+            <HiOutlineCalendarDays className="h-5 w-5 text-primary" />
+            KPIs del día —{" "}
+            {new Date(fecha + "T12:00:00").toLocaleDateString("es-AR", {
+              weekday: "long",
+              day: "numeric",
+              month: "long",
+            })}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {kpi ? (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Inbound</TableHead>
+                    <TableHead>FUPS</TableHead>
+                    <TableHead>Cal. Env.</TableHead>
+                    <TableHead>Agendadas</TableHead>
+                    <TableHead>Tasa %</TableHead>
+                    <TableHead>Cash</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  <TableRow>
+                    <TableCell className="text-lg font-semibold">{kpi.inbound_nuevo}</TableCell>
+                    <TableCell className="text-lg font-semibold">{kpi.fups}</TableCell>
+                    <TableCell className="text-lg font-semibold">{kpi.calendarios_enviados}</TableCell>
+                    <TableCell className="text-lg font-semibold">{kpi.calls_agendadas}</TableCell>
+                    <TableCell className="text-lg font-semibold">{kpi.tasa_agenda}%</TableCell>
+                    <TableCell className="text-lg font-semibold">${kpi.cash_collected}</TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </div>
+          ) : (
+            <div className="h-16 flex items-center justify-center">
+              <div className="h-6 w-6 animate-spin rounded-full border-4 border-muted border-t-foreground" />
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* KPIs — Últimos 7 días (Chart) */}
       <Card className="animate-blur-in stagger-3">
         <CardHeader className="pb-3">
           <CardTitle className="text-lg flex items-center gap-2">
             <HiOutlineChartBarSquare className="h-5 w-5 text-primary" />
             KPIs — Últimos 7 días
           </CardTitle>
+          {totals && (
+            <div className="flex flex-wrap gap-4 text-xs text-muted-foreground pt-1">
+              <span>Inbound: <strong className="text-foreground">{totals.inbound}</strong></span>
+              <span>FUPs: <strong className="text-foreground">{totals.fups}</strong></span>
+              <span>Cal. Env.: <strong className="text-foreground">{totals.cal}</strong></span>
+              <span>Agendadas: <strong className="text-foreground">{totals.calls}</strong></span>
+              <span>Tasa: <strong className="text-foreground">{totalTasa}%</strong></span>
+              <span>Cash: <strong className="text-foreground">${totals.cash}</strong></span>
+            </div>
+          )}
         </CardHeader>
         <CardContent>
-          {kpiHistory ? (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Fecha</TableHead>
-                    <TableHead className="text-right">Inbound</TableHead>
-                    <TableHead className="text-right">FUPS</TableHead>
-                    <TableHead className="text-right">Cal. Env.</TableHead>
-                    <TableHead className="text-right">Agendadas</TableHead>
-                    <TableHead className="text-right">Tasa %</TableHead>
-                    <TableHead className="text-right">Cash</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {kpiHistory.map((row) => (
-                    <TableRow key={row.fecha}>
-                      <TableCell className="font-medium">{formatFecha(row.fecha)}</TableCell>
-                      <TableCell className="text-right">{row.inbound_nuevo}</TableCell>
-                      <TableCell className="text-right">{row.fups}</TableCell>
-                      <TableCell className="text-right">{row.calendarios_enviados}</TableCell>
-                      <TableCell className="text-right">{row.calls_agendadas}</TableCell>
-                      <TableCell className="text-right">{row.tasa_agenda}%</TableCell>
-                      <TableCell className="text-right">${row.cash_collected}</TableCell>
-                    </TableRow>
-                  ))}
-                  {totals && (
-                    <TableRow className="font-bold border-t-2">
-                      <TableCell>Total</TableCell>
-                      <TableCell className="text-right">{totals.inbound}</TableCell>
-                      <TableCell className="text-right">{totals.fups}</TableCell>
-                      <TableCell className="text-right">{totals.cal}</TableCell>
-                      <TableCell className="text-right">{totals.calls}</TableCell>
-                      <TableCell className="text-right">{totalTasa}%</TableCell>
-                      <TableCell className="text-right">${totals.cash}</TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
+          {chartData ? (
+            <div className="h-72 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartData} margin={{ top: 5, right: 10, left: -10, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                  <XAxis
+                    dataKey="fecha"
+                    tick={{ fontSize: 12 }}
+                    className="text-muted-foreground"
+                  />
+                  <YAxis
+                    tick={{ fontSize: 12 }}
+                    className="text-muted-foreground"
+                    allowDecimals={false}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "hsl(var(--popover))",
+                      borderColor: "hsl(var(--border))",
+                      borderRadius: "8px",
+                      fontSize: "13px",
+                    }}
+                  />
+                  <Legend wrapperStyle={{ fontSize: "12px" }} />
+                  <Bar dataKey="Inbound" fill="#2563eb" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="FUPs" fill="#4f46e5" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="Cal. Env." fill="#0891b2" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="Agendadas" fill="#d97706" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
             </div>
           ) : (
-            <div className="h-32 flex items-center justify-center">
+            <div className="h-72 flex items-center justify-center">
               <div className="h-8 w-8 animate-spin rounded-full border-4 border-muted border-t-foreground" />
             </div>
           )}

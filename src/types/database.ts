@@ -35,6 +35,7 @@ export interface Lead {
   closer_id: string | null;
   setter_id: string;
   fecha_call: string | null;
+  fecha_call_set_at: string | null;
   created_at: string;
   updated_at: string;
   // Joins opcionales

@@ -62,13 +62,13 @@ export function useStats(fecha: string) {
           .eq("tipo", "calendario_enviado")
           .gte("created_at", startOfDay)
           .lte("created_at", endOfDay),
-        // Calls agendadas
+        // Calls agendadas (bookeadas ese día)
         getSupabase()
           .from("leads")
           .select("*", { count: "exact", head: true })
-          .not("fecha_call", "is", null)
-          .gte("fecha_call", startOfDay)
-          .lte("fecha_call", endOfDay),
+          .not("fecha_call_set_at", "is", null)
+          .gte("fecha_call_set_at", startOfDay)
+          .lte("fecha_call_set_at", endOfDay),
         // Total leads activos
         getSupabase()
           .from("leads")
@@ -129,13 +129,13 @@ export function useKPIHistory(days = 7) {
           .eq("tipo", "calendario_enviado")
           .gte("created_at", rangeStart)
           .lte("created_at", rangeEnd),
-        // Calls agendadas
+        // Calls agendadas (bookeadas en el rango)
         getSupabase()
           .from("leads")
-          .select("id, fecha_call")
-          .not("fecha_call", "is", null)
-          .gte("fecha_call", rangeStart)
-          .lte("fecha_call", rangeEnd),
+          .select("id, fecha_call_set_at")
+          .not("fecha_call_set_at", "is", null)
+          .gte("fecha_call_set_at", rangeStart)
+          .lte("fecha_call_set_at", rangeEnd),
       ]);
 
       return dates.map((fecha) => {
@@ -157,7 +157,7 @@ export function useKPIHistory(days = 7) {
         ).length;
 
         const callsAgendadas = (agendaLeads ?? []).filter(
-          (l: { fecha_call: string | null }) => l.fecha_call! >= dayStart && l.fecha_call! <= dayEnd
+          (l: { fecha_call_set_at: string | null }) => l.fecha_call_set_at! >= dayStart && l.fecha_call_set_at! <= dayEnd
         ).length;
 
         return buildKPI(fecha, inbound, fups, calEnviados, callsAgendadas);
