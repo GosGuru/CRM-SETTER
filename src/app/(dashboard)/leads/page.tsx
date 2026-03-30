@@ -3,7 +3,7 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
-import { useLeads, useBulkUpdateLeads, useBulkDeleteLeads } from "@/hooks/use-leads";
+import { useLeads, useBulkUpdateLeads, useBulkDeleteLeads, useTogglePin } from "@/hooks/use-leads";
 import { useBulkCreateInteractions } from "@/hooks/use-interactions";
 import { useBulkCreateFollowups } from "@/hooks/use-followups";
 import { useClosers, useCurrentUser } from "@/hooks/use-users";
@@ -127,6 +127,7 @@ export default function LeadsPage() {
   const { data: currentUser } = useCurrentUser();
   const bulkUpdate = useBulkUpdateLeads();
   const bulkDelete = useBulkDeleteLeads();
+  const togglePin = useTogglePin();
   const bulkInteractions = useBulkCreateInteractions();
   const bulkFollowups = useBulkCreateFollowups();
 
@@ -204,18 +205,23 @@ export default function LeadsPage() {
     const sorted = [...filteredLeads];
     switch (sortBy) {
       case "recientes":
-        return sorted.sort((a, b) => b.created_at.localeCompare(a.created_at));
+        sorted.sort((a, b) => b.created_at.localeCompare(a.created_at));
+        break;
       case "antiguos":
-        return sorted.sort((a, b) => a.created_at.localeCompare(b.created_at));
+        sorted.sort((a, b) => a.created_at.localeCompare(b.created_at));
+        break;
       case "az":
-        return sorted.sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+        sorted.sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+        break;
       case "za":
-        return sorted.sort((a, b) => b.nombre.localeCompare(a.nombre, "es"));
+        sorted.sort((a, b) => b.nombre.localeCompare(a.nombre, "es"));
+        break;
       case "calificados":
-        return sorted.sort((a, b) => qualificationScore(b) - qualificationScore(a));
-      default:
-        return sorted;
+        sorted.sort((a, b) => qualificationScore(b) - qualificationScore(a));
+        break;
     }
+    // Pinned leads always first
+    return sorted.sort((a, b) => Number(b.pinned) - Number(a.pinned));
   }, [filteredLeads, sortBy]);
 
   const useDateGrouping = sortBy === "recientes" || sortBy === "antiguos";
@@ -228,6 +234,10 @@ export default function LeadsPage() {
       else next.add(id);
       return next;
     });
+  };
+
+  const handleTogglePin = (id: string, pinned: boolean) => {
+    togglePin.mutate({ id, pinned });
   };
 
   const selectAllInDate = (dateLeads: Lead[]) => {
@@ -799,6 +809,7 @@ export default function LeadsPage() {
                     selectable={selectMode}
                     selected={selected.has(lead.id)}
                     onToggle={toggleSelect}
+                    onTogglePin={handleTogglePin}
                     lastNote={interactionsMap?.get(lead.id)}
                   />
                 ))}
@@ -839,6 +850,7 @@ export default function LeadsPage() {
                 selectable={selectMode}
                 selected={selected.has(lead.id)}
                 onToggle={toggleSelect}
+                onTogglePin={handleTogglePin}
                 lastNote={interactionsMap?.get(lead.id)}
               />
             ))}

@@ -40,7 +40,9 @@ export default function NewLeadPage() {
       return;
     }
 
-    const createdAt = `${fecha}T12:00:00`;
+    const now = new Date();
+    const todayStr = now.toISOString().slice(0, 10);
+    const createdAt = fecha === todayStr ? now.toISOString() : `${fecha}T12:00:00`;
 
     createLead.mutate(
       {
@@ -84,12 +86,14 @@ export default function NewLeadPage() {
       return;
     }
 
-    const createdAt = `${fecha}T12:00:00`;
+    const now2 = new Date();
+    const todayStr2 = now2.toISOString().slice(0, 10);
+    const baseTime = fecha === todayStr2 ? now2.toISOString() : `${fecha}T12:00:00`;
 
     const leads = lines.map((n) => ({
       nombre: n,
       setter_id: currentUser.id,
-      created_at: createdAt,
+      created_at: baseTime,
     }));
 
     bulkCreate.mutate(leads, {

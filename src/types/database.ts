@@ -36,6 +36,7 @@ export interface Lead {
   setter_id: string;
   fecha_call: string | null;
   fecha_call_set_at: string | null;
+  pinned: boolean;
   created_at: string;
   updated_at: string;
   // Joins opcionales

@@ -236,3 +236,24 @@ export function useBulkDeleteLeads() {
     },
   });
 }
+
+export function useTogglePin() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ id, pinned }: { id: string; pinned: boolean }) => {
+      const { data, error } = await getSupabase()
+        .from("leads")
+        .update({ pinned })
+        .eq("id", id)
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["leads"] });
+      queryClient.invalidateQueries({ queryKey: ["lead", variables.id] });
+    },
+  });
+}

@@ -57,11 +57,18 @@ export function QuickAddLeadDialog() {
 
     const loadingId = toast.loading("Cargando lead…");
 
+    // Use actual current time for today, noon for past dates
+    const now = new Date();
+    const todayStr = now.toISOString().slice(0, 10);
+    const createdAt = submittedFecha === todayStr
+      ? now.toISOString()
+      : `${submittedFecha}T12:00:00`;
+
     createLead.mutate(
       {
         nombre: submittedNombre,
         setter_id: currentUser.id,
-        created_at: `${submittedFecha}T12:00:00`,
+        created_at: createdAt,
       },
       {
         onSuccess: (data) => {

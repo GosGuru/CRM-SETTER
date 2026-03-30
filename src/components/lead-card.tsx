@@ -14,6 +14,7 @@ import {
   HiOutlineBriefcase,
   HiOutlineUserCircle,
 } from "react-icons/hi2";
+import { Pin } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface LeadCardProps {
@@ -21,10 +22,11 @@ interface LeadCardProps {
   selectable?: boolean;
   selected?: boolean;
   onToggle?: (id: string) => void;
+  onTogglePin?: (id: string, pinned: boolean) => void;
   lastNote?: { contenido: string; tipo: string; created_at: string };
 }
 
-export const LeadCard = memo(function LeadCardInner({ lead, selectable, selected, onToggle, lastNote }: LeadCardProps) {
+export const LeadCard = memo(function LeadCardInner({ lead, selectable, selected, onToggle, onTogglePin, lastNote }: LeadCardProps) {
   const router = useRouter();
 
   const fechaCall = lead.fecha_call
@@ -58,6 +60,7 @@ export const LeadCard = memo(function LeadCardInner({ lead, selectable, selected
       className={cn(
         "transition-all duration-200 cursor-pointer hover:shadow-md group",
         selected && "ring-2 ring-primary bg-primary/5",
+        lead.pinned && "ring-1 ring-amber-300 bg-amber-50/40",
         lead.estado === "pagó" && "border-l-4 border-l-green-500",
         lead.estado === "seguimiento" && "border-l-4 border-l-amber-400",
         lead.estado === "cerrado" && "border-l-4 border-l-red-400",
@@ -166,6 +169,24 @@ export const LeadCard = memo(function LeadCardInner({ lead, selectable, selected
               </div>
             </div>
           )}
+
+          {/* Pin button */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onTogglePin?.(lead.id, !lead.pinned);
+            }}
+            className={cn(
+              "shrink-0 mt-0.5 p-1 rounded-md transition-all",
+              lead.pinned
+                ? "text-amber-500 bg-amber-100 hover:bg-amber-200"
+                : "text-muted-foreground/40 opacity-0 group-hover:opacity-100 hover:text-amber-500 hover:bg-amber-50"
+            )}
+            title={lead.pinned ? "Desfijar" : "Fijar"}
+          >
+            <Pin className={cn("h-3.5 w-3.5", lead.pinned && "fill-amber-500")} />
+          </button>
 
           <HiOutlineChevronRight className="h-4 w-4 text-muted-foreground shrink-0 mt-1 opacity-0 group-hover:opacity-100 transition-opacity" />
         </div>
