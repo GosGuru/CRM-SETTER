@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { LeadEstado } from "@/types/database";
+import { localDateStr } from "@/lib/utils";
 
 interface UIState {
   // Filtros del dashboard
@@ -23,7 +24,7 @@ interface UIState {
 }
 
 export const useUIStore = create<UIState>((set) => ({
-  fechaSeleccionada: new Date().toISOString().split("T")[0],
+  fechaSeleccionada: localDateStr(),
   vistaLeads: "tabla",
   filtroEstado: "todos",
   sidebarOpen: false,

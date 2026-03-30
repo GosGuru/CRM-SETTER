@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
+import { localDateStr } from "@/lib/utils";
 import type { DailyKPI } from "@/types/database";
 
 let _supabase: ReturnType<typeof createClient>;
@@ -98,7 +99,7 @@ export function useKPIHistory(days = 7) {
       for (let i = days - 1; i >= 0; i--) {
         const d = new Date(today);
         d.setDate(d.getDate() - i);
-        dates.push(d.toISOString().slice(0, 10));
+        dates.push(localDateStr(d));
       }
 
       const rangeStart = `${dates[0]}T00:00:00`;

@@ -1,6 +1,7 @@
 "use client";
 
 import { use, useState } from "react";
+import { localDateStr } from "@/lib/utils";
 import { useLead, useUpdateLead } from "@/hooks/use-leads";
 import { useInteractions, useCreateInteraction } from "@/hooks/use-interactions";
 import { useLeadFollowups, useCreateFollowup } from "@/hooks/use-followups";
@@ -74,7 +75,7 @@ export default function LeadDetailPage({
 
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
-  const tomorrowStr = tomorrow.toISOString().slice(0, 10);
+  const tomorrowStr = localDateStr(tomorrow);
 
   const handleFupManana = () => {
     if (!currentUser || !lead) return;

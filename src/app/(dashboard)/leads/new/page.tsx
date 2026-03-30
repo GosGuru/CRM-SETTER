@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { toast } from "sonner";
 import { showLeadAddedToast } from "@/components/lead-added-toast";
+import { localDateStr } from "@/lib/utils";
 import { HiOutlineArrowLeft, HiOutlineUserPlus, HiOutlineUsers } from "react-icons/hi2";
 import Link from "next/link";
 
@@ -24,7 +25,7 @@ export default function NewLeadPage() {
   const [nombres, setNombres] = useState("");
   const [fecha, setFecha] = useState(() => {
     const now = new Date();
-    return now.toISOString().slice(0, 10);
+    return localDateStr(now);
   });
 
   const handleSubmitSingle = async (e: React.FormEvent) => {
@@ -41,7 +42,7 @@ export default function NewLeadPage() {
     }
 
     const now = new Date();
-    const todayStr = now.toISOString().slice(0, 10);
+    const todayStr = localDateStr(now);
     const createdAt = fecha === todayStr ? now.toISOString() : `${fecha}T12:00:00`;
 
     createLead.mutate(
@@ -87,7 +88,7 @@ export default function NewLeadPage() {
     }
 
     const now2 = new Date();
-    const todayStr2 = now2.toISOString().slice(0, 10);
+    const todayStr2 = localDateStr(now2);
     const baseTime = fecha === todayStr2 ? now2.toISOString() : `${fecha}T12:00:00`;
 
     const leads = lines.map((n) => ({

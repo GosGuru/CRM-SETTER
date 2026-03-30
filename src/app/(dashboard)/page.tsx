@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { localDateStr } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { LeadCard } from "@/components/lead-card";
 import { FupCard } from "@/components/fup-card";
@@ -84,7 +85,7 @@ function StatCard({
 function shiftDate(isoDate: string, days: number): string {
   const d = new Date(isoDate + "T12:00:00");
   d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
+  return localDateStr(d);
 }
 
 function formatFecha(iso: string) {
@@ -110,7 +111,7 @@ export default function DashboardPage() {
   const fupsCompletados = fups?.filter((f) => f.completado).length ?? 0;
   const fupsTotal = fups?.length ?? 0;
 
-  const hoy = new Date().toISOString().slice(0, 10);
+  const hoy = localDateStr();
   const esHoy = fecha === hoy;
 
   const kpi = stats?.kpi;
@@ -199,7 +200,7 @@ export default function DashboardPage() {
                 selected={selectedDate}
                 onSelect={(day) => {
                   if (day) {
-                    setFecha(day.toISOString().slice(0, 10));
+                    setFecha(localDateStr(day));
                     setCalendarOpen(false);
                   }
                 }}

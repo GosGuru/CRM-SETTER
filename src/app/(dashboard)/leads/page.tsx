@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
+import { localDateStr } from "@/lib/utils";
 import { useLeads, useBulkUpdateLeads, useBulkDeleteLeads, useTogglePin } from "@/hooks/use-leads";
 import { useBulkCreateInteractions } from "@/hooks/use-interactions";
 import { useBulkCreateFollowups } from "@/hooks/use-followups";
@@ -99,8 +100,8 @@ function groupByDate(leads: Lead[]): { date: string; label: string; leads: Lead[
 
   const sorted = [...groups.entries()].sort((a, b) => b[0].localeCompare(a[0]));
 
-  const hoy = new Date().toISOString().slice(0, 10);
-  const ayer = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  const hoy = localDateStr();
+  const ayer = localDateStr(new Date(Date.now() - 86400000));
 
   return sorted.map(([date, leads]) => {
     let label: string;
@@ -180,15 +181,15 @@ export default function LeadsPage() {
     }
     if (dateFilter !== "todos") {
       const now = new Date();
-      const todayStr = now.toISOString().slice(0, 10);
-      const yesterdayStr = new Date(now.getTime() - 86400000).toISOString().slice(0, 10);
+      const todayStr = localDateStr(now);
+      const yesterdayStr = localDateStr(new Date(now.getTime() - 86400000));
 
       if (dateFilter === "hoy") {
         result = result.filter((l) => l.created_at.slice(0, 10) === todayStr);
       } else if (dateFilter === "ayer") {
         result = result.filter((l) => l.created_at.slice(0, 10) === yesterdayStr);
       } else if (dateFilter === "semana") {
-        const weekAgo = new Date(now.getTime() - 7 * 86400000).toISOString().slice(0, 10);
+        const weekAgo = localDateStr(new Date(now.getTime() - 7 * 86400000));
         result = result.filter((l) => l.created_at.slice(0, 10) >= weekAgo);
       } else {
         // custom YYYY-MM-DD

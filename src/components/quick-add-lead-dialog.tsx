@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { localDateStr } from "@/lib/utils";
 import {
   HiOutlineUserPlus,
   HiOutlineUsers,
@@ -32,7 +33,7 @@ export function QuickAddLeadDialog() {
   const createLead = useCreateLead();
 
   const [nombre, setNombre] = useState("");
-  const [fecha, setFecha] = useState(() => new Date().toISOString().slice(0, 10));
+  const [fecha, setFecha] = useState(() => localDateStr());
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -59,7 +60,7 @@ export function QuickAddLeadDialog() {
 
     // Use actual current time for today, noon for past dates
     const now = new Date();
-    const todayStr = now.toISOString().slice(0, 10);
+    const todayStr = localDateStr(now);
     const createdAt = submittedFecha === todayStr
       ? now.toISOString()
       : `${submittedFecha}T12:00:00`;
