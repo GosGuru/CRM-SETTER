@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useState } from "react";
+import { use, useEffect, useState } from "react";
 import { localDateStr } from "@/lib/utils";
 import { useLead, useUpdateLead } from "@/hooks/use-leads";
 import { useInteractions, useCreateInteraction, useDeleteInteraction } from "@/hooks/use-interactions";
@@ -15,6 +15,8 @@ import { PaymentSection } from "@/components/payment-section";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
@@ -76,6 +78,15 @@ export default function LeadDetailPage({
   const [seguimientoOpen, setSeguimientoOpen] = useState(false);
   const [fupDialogOpen, setFupDialogOpen] = useState(false);
   const [fupDefaultDate, setFupDefaultDate] = useState<string | undefined>();
+  const [nombreReal, setNombreReal] = useState("");
+  const [apellido, setApellido] = useState("");
+
+  useEffect(() => {
+    if (lead) {
+      setNombreReal(lead.nombre_real ?? "");
+      setApellido(lead.apellido ?? "");
+    }
+  }, [lead?.id]);
 
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
@@ -234,6 +245,52 @@ export default function LeadDetailPage({
         onOpenChange={setFupDialogOpen}
         defaultDate={fupDefaultDate}
       />
+
+      {/* Nombre completo */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Nombre completo</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col sm:flex-row items-end gap-3">
+            <div className="flex-1 space-y-1.5 w-full">
+              <Label htmlFor="nombre_real">Nombre</Label>
+              <Input
+                id="nombre_real"
+                value={nombreReal}
+                onChange={(e) => setNombreReal(e.target.value)}
+                placeholder="Máximo"
+              />
+            </div>
+            <div className="flex-1 space-y-1.5 w-full">
+              <Label htmlFor="apellido">Apellido</Label>
+              <Input
+                id="apellido"
+                value={apellido}
+                onChange={(e) => setApellido(e.target.value)}
+                placeholder="Pereyra"
+              />
+            </div>
+            <Button
+              size="sm"
+              variant="secondary"
+              className="cursor-pointer shrink-0"
+              disabled={updateLead.isPending}
+              onClick={() =>
+                updateLead.mutate(
+                  { id: lead.id, nombre_real: nombreReal.trim() || null, apellido: apellido.trim() || null },
+                  {
+                    onSuccess: () => toast.success("Nombre guardado"),
+                    onError: (err) => toast.error(err instanceof Error ? err.message : "Error"),
+                  }
+                )
+              }
+            >
+              Guardar
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Contenido condicional: sin agenda vs con agenda */}
       {!tieneAgenda ? (

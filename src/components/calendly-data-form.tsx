@@ -44,6 +44,8 @@ export function CalendlyDataForm({ lead }: { lead: Lead }) {
   const [copied, setCopied] = useState(false);
 
   const [form, setForm] = useState({
+    nombre_real: lead.nombre_real ?? "",
+    apellido: lead.apellido ?? "",
     celular: lead.celular ?? "",
     email: lead.email ?? "",
     edad: lead.edad ? String(lead.edad) : "",
@@ -72,8 +74,10 @@ export function CalendlyDataForm({ lead }: { lead: Lead }) {
     const lines = [
       fechaStr,
       `Nombre: ${lead.nombre}`,
+      ...(form.nombre_real || form.apellido ? [`Nombre real: ${[form.nombre_real, form.apellido].filter(Boolean).join(" ") || "—"}`] : []),
       `Edad: ${form.edad || "—"}`,
       `Trabajo: ${form.trabajo || "—"}`,
+
       `Closer: ${closerName || "—"}`,
       `Respuestas: ${form.respuestas || "—"}`,
       `Contacto (Con el +): ${form.celular || "—"}`,
@@ -105,6 +109,8 @@ export function CalendlyDataForm({ lead }: { lead: Lead }) {
     updateLead.mutate(
       {
         id: lead.id,
+        nombre_real: form.nombre_real.trim() || null,
+        apellido: form.apellido.trim() || null,
         celular: form.celular.trim() || null,
         email: form.email.trim() || null,
         edad: form.edad ? Number(form.edad) : null,
@@ -190,6 +196,30 @@ export function CalendlyDataForm({ lead }: { lead: Lead }) {
                   required
                 />
               </div>
+            </div>
+          </div>
+
+          {/* Nombre real + Apellido */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="nombre_real">Nombre real</Label>
+              <Input
+                id="nombre_real"
+                name="nombre_real"
+                value={form.nombre_real}
+                onChange={handleChange}
+                placeholder="Máximo"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="apellido">Apellido</Label>
+              <Input
+                id="apellido"
+                name="apellido"
+                value={form.apellido}
+                onChange={handleChange}
+                placeholder="Pereyra"
+              />
             </div>
           </div>
 

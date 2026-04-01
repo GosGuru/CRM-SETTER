@@ -41,6 +41,8 @@ export interface Lead {
   fecha_call: string | null;
   fecha_call_set_at: string | null;
   pinned: boolean;
+  nombre_real: string | null;
+  apellido: string | null;
   pago_programa: boolean;
   plan_pago: PlanPago | null;
   monto_programa: number | null;
