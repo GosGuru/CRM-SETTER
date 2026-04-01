@@ -170,6 +170,14 @@ export default function LeadsPage() {
   const [soloConNotas, setSoloConNotas] = useState(false);
   const [sortBy, setSortBy] = useState<SortOption>("recientes");
 
+  // Auto-clear date filter when user starts searching so results aren't hidden
+  useEffect(() => {
+    if (debouncedSearch.trim() && dateFilter !== "todos") {
+      setDateFilter("todos");
+      setCustomDate(null);
+    }
+  }, [debouncedSearch]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Infinite leads query (server-side filters + pagination) ───
   const {
     data,

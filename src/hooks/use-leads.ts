@@ -33,12 +33,35 @@ export function useInfiniteLeads(filters: InfiniteLeadsFilters) {
         query = query.eq("estado", filters.filtroEstado);
       }
 
-      // Search (server-side ilike)
+      // Search (server-side ilike) — normalize whitespace, search all name fields
       if (filters.search?.trim()) {
-        const q = `%${filters.search.trim()}%`;
-        query = query.or(
-          `nombre.ilike.${q},celular.ilike.${q},email.ilike.${q},instagram.ilike.${q}`
-        );
+        const normalized = filters.search.replace(/\s+/g, " ").trim();
+        const words = normalized.split(" ").filter(Boolean);
+
+        const SEARCH_FIELDS = [
+          "nombre",
+          "nombre_real",
+          "apellido",
+          "celular",
+          "email",
+          "instagram",
+        ] as const;
+
+        if (words.length === 1) {
+          // Single word — OR across all fields
+          const q = `%${words[0]}%`;
+          query = query.or(
+            SEARCH_FIELDS.map((f) => `${f}.ilike.${q}`).join(",")
+          );
+        } else {
+          // Multiple words — each word must appear in *any* field (AND between words)
+          for (const word of words) {
+            const q = `%${word}%`;
+            query = query.or(
+              SEARCH_FIELDS.map((f) => `${f}.ilike.${q}`).join(",")
+            );
+          }
+        }
       }
 
       // Date filter — bounds use localDayBoundsISO so Supabase timestamptz
@@ -89,6 +112,8 @@ export function useInfiniteLeads(filters: InfiniteLeadsFilters) {
     initialPageParam: 0,
     getNextPageParam: (lastPage, _allPages, lastPageParam) =>
       lastPage.length === LEADS_PAGE_SIZE ? (lastPageParam as number) + 1 : undefined,
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
   });
 }
 
