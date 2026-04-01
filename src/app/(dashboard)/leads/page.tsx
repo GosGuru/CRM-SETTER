@@ -7,8 +7,6 @@ import { createClient } from "@/lib/supabase/client";
 import { localDateStr } from "@/lib/utils";
 import {
   useInfiniteLeads,
-  useLeadsSearchIndex,
-  searchLeads,
   useBulkUpdateLeads,
   useBulkDeleteLeads,
   useTogglePin,
@@ -174,10 +172,7 @@ export default function LeadsPage() {
 
   const isSearching = debouncedSearch.trim().length > 0;
 
-  // ── Search index (client-side filtered over the full visible dataset) ─
-  const { data: searchIndexData, isFetching: searchIndexFetching } = useLeadsSearchIndex(isSearching);
-
-  // ── Infinite leads query (server-side filters + pagination) ───
+  // ── Infinite leads query (server-side filters + search + pagination) ───
   const {
     data,
     isLoading,
@@ -186,13 +181,14 @@ export default function LeadsPage() {
     hasNextPage,
     fetchNextPage,
   } = useInfiniteLeads({
-    filtroEstado: isSearching ? "todos" : filtroEstado,
-    dateFilter: isSearching ? "todos" : dateFilter,
+    filtroEstado,
+    search: debouncedSearch || undefined,
+    dateFilter,
     sortBy,
   });
 
   // Flatten pages
-  const pagedLeads = useMemo(() => {
+  const allLeads = useMemo(() => {
     const flat = data?.pages.flat() ?? [];
     if (sortBy === "calificados") {
       return [...flat].sort((a, b) => qualificationScore(b) - qualificationScore(a));
@@ -200,17 +196,7 @@ export default function LeadsPage() {
     return flat;
   }, [data, sortBy]);
 
-  // When searching: use client-side filtered index. Otherwise: paginated.
-  const allLeads = useMemo(() => {
-    if (isSearching) {
-      const base = searchIndexData ?? [];
-      return searchLeads(base, debouncedSearch);
-    }
-    return pagedLeads;
-  }, [isSearching, searchIndexData, debouncedSearch, pagedLeads]);
-
-  const isSearchLoading = isSearching && searchIndexFetching && !searchIndexData;
-  const isListLoading = isLoading || isSearchLoading;
+  const isListLoading = isLoading;
 
   // ── Interactions map — only for loaded lead IDs ───────────────
   const loadedIds = useMemo(() => allLeads.map((l) => l.id), [allLeads]);
@@ -605,7 +591,7 @@ export default function LeadsPage() {
             onChange={(e) => setSearch(e.target.value)}
             className="pl-9 h-10 w-full rounded-xl bg-background border border-input focus-visible:ring-2 focus-visible:ring-primary/30 transition-shadow"
           />
-          {(isFetching || (isSearching && searchIndexFetching)) && (
+          {isFetching && (
             <div
               className={`absolute top-1/2 -translate-y-1/2 h-4 w-4 animate-spin rounded-full border-2 border-muted border-t-primary ${search ? "right-10" : "right-3"}`}
               aria-hidden
