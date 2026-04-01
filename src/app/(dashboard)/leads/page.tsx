@@ -174,8 +174,8 @@ export default function LeadsPage() {
 
   const isSearching = debouncedSearch.trim().length > 0;
 
-  // ── Search index (client-side — no PostgREST ilike/or issues) ─
-  const { data: searchIndexData, isFetching: searchIndexFetching } = useLeadsSearchIndex();
+  // ── Search index (client-side filtered over the full visible dataset) ─
+  const { data: searchIndexData, isFetching: searchIndexFetching } = useLeadsSearchIndex(isSearching);
 
   // ── Infinite leads query (server-side filters + pagination) ───
   const {
@@ -208,6 +208,9 @@ export default function LeadsPage() {
     }
     return pagedLeads;
   }, [isSearching, searchIndexData, debouncedSearch, pagedLeads]);
+
+  const isSearchLoading = isSearching && searchIndexFetching && !searchIndexData;
+  const isListLoading = isLoading || isSearchLoading;
 
   // ── Interactions map — only for loaded lead IDs ───────────────
   const loadedIds = useMemo(() => allLeads.map((l) => l.id), [allLeads]);
@@ -287,7 +290,7 @@ export default function LeadsPage() {
       setScrollMargin(listRect.top - mainRect.top + scrollElementRef.current.scrollTop);
     };
     update();
-  }, [isLoading, flatItems.length]);
+  }, [isListLoading, flatItems.length]);
 
   const virtualizer = useVirtualizer({
     count: flatItems.length,
@@ -948,7 +951,7 @@ export default function LeadsPage() {
       )}
 
       {/* Lista de leads — virtualizada */}
-      {isLoading ? (
+      {isListLoading ? (
         <div className="flex flex-col items-center justify-center py-20 gap-3 text-muted-foreground">
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-muted border-t-primary" />
           <span className="text-sm">Cargando leads...</span>

@@ -16,16 +16,9 @@ export type InfiniteLeadsFilters = {
   sortBy?: SortOption;
 };
 
-const SEARCH_FIELDS = [
-  "nombre",
-  "nombre_real",
-  "apellido",
-  "celular",
-  "email",
-  "instagram",
-] as const;
-
 const DIACRITICS_REGEX = /[\u0300-\u036f]/g;
+const LEAD_LIST_SELECT =
+  "id, nombre, nombre_real, apellido, celular, email, instagram, estado, closer_id, setter_id, fecha_call, fecha_call_set_at, pinned, created_at, updated_at, pago_programa, plan_pago, monto_programa, fecha_pago, respuestas, objetivo, edad, trabajo, decisor, inversion_ok, compromiso, closer:users!leads_closer_id_fkey(id,full_name), setter:users!leads_setter_id_fkey(id,full_name)";
 
 // Solo normaliza espacios — NO reemplaza _ . - porque son parte de handles de Instagram
 function normalizeSearchInput(value: string): string {
@@ -51,11 +44,60 @@ function escapeLikePattern(value: string): string {
   return value.replace(/[\\%_]/g, "\\$&");
 }
 
-function canonicalName(value: string): string {
+function canonicalText(value: string): string {
   return normalizeSearchInput(value)
     .toLowerCase()
     .normalize("NFD")
     .replace(DIACRITICS_REGEX, "");
+}
+
+function digitsOnly(value: string): string {
+  return value.replace(/\D+/g, "");
+}
+
+function buildLeadSearchIndex(lead: Lead): string {
+  const values = [
+    lead.nombre,
+    lead.nombre_real,
+    lead.apellido,
+    [lead.nombre_real, lead.apellido].filter(Boolean).join(" "),
+    lead.celular,
+    lead.email,
+    lead.instagram,
+  ].filter((value): value is string => Boolean(value && value.trim()));
+
+  const index = new Set<string>();
+
+  for (const value of values) {
+    const normalized = canonicalText(value);
+    if (normalized) {
+      index.add(normalized);
+      index.add(normalized.replace(/^@+/, ""));
+    }
+
+    const digits = digitsOnly(value);
+    if (digits) index.add(digits);
+  }
+
+  return [...index].filter(Boolean).join(" ");
+}
+
+function buildSearchTokenGroups(term: string): string[][] {
+  const normalized = canonicalText(term);
+  if (!normalized) return [];
+
+  return tokenizeSearch(normalized)
+    .map((token) => {
+      const variants = new Set<string>();
+      variants.add(token);
+      variants.add(token.replace(/^@+/, ""));
+
+      const digits = digitsOnly(token);
+      if (digits) variants.add(digits);
+
+      return [...variants].filter(Boolean);
+    })
+    .filter((group) => group.length > 0);
 }
 
 export function useInfiniteLeads(filters: InfiniteLeadsFilters) {
@@ -67,7 +109,7 @@ export function useInfiniteLeads(filters: InfiniteLeadsFilters) {
 
       let query = getSupabase()
         .from("leads")
-        .select("*, closer:users!leads_closer_id_fkey(id,full_name), setter:users!leads_setter_id_fkey(id,full_name)")
+        .select(LEAD_LIST_SELECT)
         .range(from, to);
 
       // Estado filter
@@ -120,7 +162,7 @@ export function useInfiniteLeads(filters: InfiniteLeadsFilters) {
 
       const { data, error } = await query;
       if (error) throw error;
-      return (data ?? []) as Lead[];
+      return (data ?? []) as unknown as Lead[];
     },
     initialPageParam: 0,
     getNextPageParam: (lastPage, _allPages, lastPageParam) =>
@@ -134,41 +176,67 @@ export function useInfiniteLeads(filters: InfiniteLeadsFilters) {
 }
 
 // --- Client-side search index ---
-// Loads all leads (no search filter on server) and exposes a filter function.
-// This avoids all PostgREST ilike/.or() encoding issues permanently.
-export const SEARCH_INDEX_SIZE = 1500;
+// Loads all visible leads in batches so search can cover the full dataset
+// instead of a capped snapshot of the newest rows only.
+export const SEARCH_INDEX_BATCH_SIZE = 500;
 
-export function useLeadsSearchIndex() {
+export function useLeadsSearchIndex(enabled: boolean) {
   return useQuery({
     queryKey: ["leads-search-index"],
     queryFn: async () => {
-      const { data, error } = await getSupabase()
-        .from("leads")
-        .select(
-          "id, nombre, nombre_real, apellido, celular, email, instagram, estado, closer_id, setter_id, fecha_call, fecha_call_set_at, pinned, created_at, updated_at, pago_programa, plan_pago, monto_programa, fecha_pago, respuestas, objetivo, edad, trabajo, decisor, inversion_ok, compromiso, closer:users!leads_closer_id_fkey(id,full_name), setter:users!leads_setter_id_fkey(id,full_name)"
-        )
-        .order("created_at", { ascending: false })
-        .limit(SEARCH_INDEX_SIZE);
-      if (error) throw error;
-      return (data ?? []) as unknown as Lead[];
+      const allLeads: Lead[] = [];
+
+      for (let page = 0; ; page++) {
+        const from = page * SEARCH_INDEX_BATCH_SIZE;
+        const to = from + SEARCH_INDEX_BATCH_SIZE - 1;
+
+        const { data, error } = await getSupabase()
+          .from("leads")
+          .select(LEAD_LIST_SELECT)
+          .order("created_at", { ascending: false })
+          .range(from, to);
+
+        if (error) throw error;
+
+        const batch = (data ?? []) as unknown as Lead[];
+        allLeads.push(...batch);
+
+        if (batch.length < SEARCH_INDEX_BATCH_SIZE) break;
+      }
+
+      return allLeads;
     },
+    enabled,
     staleTime: 30_000,
     refetchOnWindowFocus: false,
+    placeholderData: (previousData) => previousData,
   });
 }
 
 export function searchLeads(leads: Lead[], term: string): Lead[] {
-  const q = term.trim().toLowerCase();
-  if (!q) return leads;
-  return leads.filter(
-    (l) =>
-      l.nombre?.toLowerCase().includes(q) ||
-      l.nombre_real?.toLowerCase().includes(q) ||
-      l.apellido?.toLowerCase().includes(q) ||
-      l.celular?.toLowerCase().includes(q) ||
-      l.email?.toLowerCase().includes(q) ||
-      l.instagram?.toLowerCase().replace("@", "").includes(q.replace("@", ""))
-  );
+  const normalized = canonicalText(term);
+  if (!normalized) return leads;
+
+  const fullQueryVariants = new Set<string>([
+    normalized,
+    normalized.replace(/^@+/, ""),
+  ]);
+  const digitsQuery = digitsOnly(term);
+  if (digitsQuery) fullQueryVariants.add(digitsQuery);
+
+  const tokenGroups = buildSearchTokenGroups(term);
+
+  return leads.filter((lead) => {
+    const searchIndex = buildLeadSearchIndex(lead);
+    if (!searchIndex) return false;
+
+    if ([...fullQueryVariants].some((variant) => variant && searchIndex.includes(variant))) {
+      return true;
+    }
+
+    return tokenGroups.length > 0 &&
+      tokenGroups.every((group) => group.some((variant) => variant && searchIndex.includes(variant)));
+  });
 }
 
 let _supabase: ReturnType<typeof createClient>;
@@ -245,7 +313,7 @@ export function useCreateLead() {
     mutationFn: async (lead: { nombre: string; setter_id: string; created_at?: string }) => {
       // Duplicate check aligned with search normalization and accent-insensitive comparison.
       const normalized = normalizeStoredName(lead.nombre);
-      const canonical = canonicalName(normalized);
+      const canonical = canonicalText(normalized);
       const probeToken = tokenizeSearch(normalized)[0] ?? normalizeSearchInput(normalized);
       const probe = `%${escapeLikePattern(probeToken)}%`;
 
@@ -256,7 +324,7 @@ export function useCreateLead() {
         .limit(50);
       if (duplicateError) throw duplicateError;
 
-      const existing = (candidates ?? []).find((row) => canonicalName(row.nombre) === canonical);
+      const existing = (candidates ?? []).find((row) => canonicalText(row.nombre) === canonical);
       if (existing) {
         throw new Error(`Ya existe un lead con el nombre "${existing.nombre}"`);
       }
@@ -278,6 +346,7 @@ export function useCreateLead() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["leads"] });
       queryClient.invalidateQueries({ queryKey: ["leads-infinite"] });
+      queryClient.invalidateQueries({ queryKey: ["leads-search-index"] });
       queryClient.invalidateQueries({ queryKey: ["stats"] });
     },
   });
@@ -291,7 +360,7 @@ export function useBulkCreateLeads() {
       // 1. Dedupe within the batch (case-insensitive)
       const seen = new Set<string>();
       const unique = leads.filter((l) => {
-        const key = canonicalName(l.nombre);
+        const key = canonicalText(l.nombre);
         if (seen.has(key)) return false;
         seen.add(key);
         return true;
@@ -321,11 +390,11 @@ export function useBulkCreateLeads() {
       }
 
       const existingLower = new Set(
-        existing.map((l) => canonicalName(l.nombre))
+        existing.map((l) => canonicalText(l.nombre))
       );
 
-      const duplicates = unique.filter((l) => existingLower.has(canonicalName(l.nombre)));
-      const toInsert = unique.filter((l) => !existingLower.has(canonicalName(l.nombre)));
+      const duplicates = unique.filter((l) => existingLower.has(canonicalText(l.nombre)));
+      const toInsert = unique.filter((l) => !existingLower.has(canonicalText(l.nombre)));
 
       if (toInsert.length === 0) {
         throw new Error(
@@ -354,6 +423,7 @@ export function useBulkCreateLeads() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["leads"] });
       queryClient.invalidateQueries({ queryKey: ["leads-infinite"] });
+      queryClient.invalidateQueries({ queryKey: ["leads-search-index"] });
       queryClient.invalidateQueries({ queryKey: ["stats"] });
     },
   });
@@ -379,6 +449,7 @@ export function useUpdateLead() {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["leads"] });
       queryClient.invalidateQueries({ queryKey: ["leads-infinite"] });
+      queryClient.invalidateQueries({ queryKey: ["leads-search-index"] });
       queryClient.invalidateQueries({ queryKey: ["lead", variables.id] });
       queryClient.invalidateQueries({ queryKey: ["stats"] });
       queryClient.invalidateQueries({ queryKey: ["followups"] });
@@ -408,6 +479,7 @@ export function useBulkUpdateLeads() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["leads"] });
       queryClient.invalidateQueries({ queryKey: ["leads-infinite"] });
+      queryClient.invalidateQueries({ queryKey: ["leads-search-index"] });
       queryClient.invalidateQueries({ queryKey: ["stats"] });
       queryClient.invalidateQueries({ queryKey: ["followups"] });
     },
@@ -428,6 +500,7 @@ export function useBulkDeleteLeads() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["leads"] });
       queryClient.invalidateQueries({ queryKey: ["leads-infinite"] });
+      queryClient.invalidateQueries({ queryKey: ["leads-search-index"] });
       queryClient.invalidateQueries({ queryKey: ["stats"] });
       queryClient.invalidateQueries({ queryKey: ["followups"] });
     },
@@ -451,6 +524,7 @@ export function useTogglePin() {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["leads"] });
       queryClient.invalidateQueries({ queryKey: ["leads-infinite"] });
+      queryClient.invalidateQueries({ queryKey: ["leads-search-index"] });
       queryClient.invalidateQueries({ queryKey: ["lead", variables.id] });
     },
   });
@@ -483,6 +557,7 @@ export function useUpdateLeadPayment() {
       return data;
     },
     onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["leads-search-index"] });
       queryClient.invalidateQueries({ queryKey: ["lead", variables.id] });
       queryClient.invalidateQueries({ queryKey: ["stats"] });
       queryClient.invalidateQueries({ queryKey: ["kpi-history"] });
