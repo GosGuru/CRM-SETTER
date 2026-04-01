@@ -159,7 +159,7 @@ export default function LeadsPage() {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    const t = setTimeout(() => setDebouncedSearch(search), 180);
     return () => clearTimeout(t);
   }, [search]);
 
@@ -170,18 +170,21 @@ export default function LeadsPage() {
   const [soloConNotas, setSoloConNotas] = useState(false);
   const [sortBy, setSortBy] = useState<SortOption>("recientes");
 
-  // Auto-clear date filter when user starts searching so results aren't hidden
+  // Auto-clear restrictive filters when searching so matches are not hidden.
   useEffect(() => {
-    if (debouncedSearch.trim() && dateFilter !== "todos") {
-      setDateFilter("todos");
-      setCustomDate(null);
-    }
-  }, [debouncedSearch]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (!debouncedSearch.trim()) return;
+
+    if (dateFilter !== "todos") setDateFilter("todos");
+    if (customDate) setCustomDate(null);
+    if (filtroEstado !== "todos") setFiltroEstado("todos");
+    if (soloConNotas) setSoloConNotas(false);
+  }, [debouncedSearch, dateFilter, customDate, filtroEstado, soloConNotas, setFiltroEstado]);
 
   // ── Infinite leads query (server-side filters + pagination) ───
   const {
     data,
     isLoading,
+    isFetching,
     isFetchingNextPage,
     hasNextPage,
     fetchNextPage,
@@ -203,9 +206,10 @@ export default function LeadsPage() {
 
   // ── Interactions map — only for loaded lead IDs ───────────────
   const loadedIds = useMemo(() => allLeads.map((l) => l.id), [allLeads]);
+  const shouldFetchInteractions = loadedIds.length > 0 && debouncedSearch.trim().length === 0;
 
   const { data: interactionsMap } = useQuery({
-    queryKey: ["leads-last-interactions", loadedIds],
+    queryKey: ["leads-last-interactions", shouldFetchInteractions ? loadedIds : []],
     queryFn: async () => {
       if (loadedIds.length === 0) return new Map<string, { contenido: string; tipo: string; created_at: string }>();
       const supabase = createClient();
@@ -224,8 +228,13 @@ export default function LeadsPage() {
       return map;
     },
     staleTime: 60_000,
-    enabled: loadedIds.length > 0,
+    enabled: shouldFetchInteractions,
   });
+
+  const activeRestrictiveFilters =
+    (filtroEstado !== "todos" ? 1 : 0) +
+    (dateFilter !== "todos" ? 1 : 0) +
+    (soloConNotas ? 1 : 0);
 
   // ── Build flat virtual items array ────────────────────────────
   const useDateGrouping = sortBy === "recientes" || sortBy === "antiguos";
@@ -588,6 +597,12 @@ export default function LeadsPage() {
             onChange={(e) => setSearch(e.target.value)}
             className="pl-9 h-10 w-full rounded-xl bg-background border border-input focus-visible:ring-2 focus-visible:ring-primary/30 transition-shadow"
           />
+          {isFetching && (
+            <div
+              className={`absolute top-1/2 -translate-y-1/2 h-4 w-4 animate-spin rounded-full border-2 border-muted border-t-primary ${search ? "right-10" : "right-3"}`}
+              aria-hidden
+            />
+          )}
           {search && (
             <button
               type="button"
@@ -610,6 +625,11 @@ export default function LeadsPage() {
           >
             <ListFilter className="h-4 w-4 sm:mr-2" />
             <span className="hidden sm:inline">Filtros</span>
+            {activeRestrictiveFilters > 0 && (
+              <span className="ml-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-semibold text-primary-foreground">
+                {activeRestrictiveFilters}
+              </span>
+            )}
           </SheetTrigger>
           <SheetContent side="bottom" className="sm:max-w-md mx-auto rounded-t-2xl max-h-[90vh] overflow-y-auto px-6 py-6 ring-1 ring-border">
             <SheetHeader className="mb-6 text-left">
@@ -931,8 +951,14 @@ export default function LeadsPage() {
       ) : flatItems.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center text-muted-foreground">
-            No hay leads
-            {filtroEstado !== "todos" ? ` con estado "${filtroEstado}"` : ""}
+            {debouncedSearch.trim()
+              ? `No encontramos resultados para "${debouncedSearch}".`
+              : "No hay leads"}
+            {debouncedSearch.trim()
+              ? " Probá con menos palabras o quitá filtros."
+              : filtroEstado !== "todos"
+                ? ` con estado "${filtroEstado}"`
+                : ""}
           </CardContent>
         </Card>
       ) : (

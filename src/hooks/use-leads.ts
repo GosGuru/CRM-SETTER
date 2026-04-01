@@ -16,6 +16,66 @@ export type InfiniteLeadsFilters = {
   sortBy?: SortOption;
 };
 
+const SEARCH_FIELDS = [
+  "nombre",
+  "nombre_real",
+  "apellido",
+  "celular",
+  "email",
+  "instagram",
+] as const;
+
+const TOKEN_SEPARATOR_REGEX = /[\s._-]+/g;
+const DIACRITICS_REGEX = /[\u0300-\u036f]/g;
+
+function normalizeSearchInput(value: string): string {
+  return value
+    .normalize("NFKC")
+    .replace(/[(),"']/g, " ")
+    .replace(TOKEN_SEPARATOR_REGEX, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function normalizeStoredName(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function tokenizeSearch(value: string): string[] {
+  return normalizeSearchInput(value)
+    .split(" ")
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+function escapeLikePattern(value: string): string {
+  return value.replace(/[\\%_]/g, "\\$&");
+}
+
+function buildWordOrFilter(word: string): string {
+  const q = `%${escapeLikePattern(word)}%`;
+  return `or(${SEARCH_FIELDS.map((field) => `${field}.ilike.${q}`).join(",")})`;
+}
+
+function buildSearchFilter(search: string): string | null {
+  const words = tokenizeSearch(search).slice(0, 5);
+  if (words.length === 0) return null;
+
+  if (words.length === 1) {
+    const q = `%${escapeLikePattern(words[0])}%`;
+    return SEARCH_FIELDS.map((field) => `${field}.ilike.${q}`).join(",");
+  }
+
+  return `and(${words.map((word) => buildWordOrFilter(word)).join(",")})`;
+}
+
+function canonicalName(value: string): string {
+  return normalizeSearchInput(value)
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(DIACRITICS_REGEX, "");
+}
+
 export function useInfiniteLeads(filters: InfiniteLeadsFilters) {
   return useInfiniteQuery({
     queryKey: ["leads-infinite", filters],
@@ -25,7 +85,7 @@ export function useInfiniteLeads(filters: InfiniteLeadsFilters) {
 
       let query = getSupabase()
         .from("leads")
-        .select("*, closer:users!leads_closer_id_fkey(*), setter:users!leads_setter_id_fkey(*)")
+        .select("*, closer:users!leads_closer_id_fkey(id,full_name), setter:users!leads_setter_id_fkey(id,full_name)")
         .range(from, to);
 
       // Estado filter
@@ -33,34 +93,11 @@ export function useInfiniteLeads(filters: InfiniteLeadsFilters) {
         query = query.eq("estado", filters.filtroEstado);
       }
 
-      // Search (server-side ilike) — normalize whitespace, search all name fields
+      // Search (server-side ilike) — normalize separators and search by tokens
       if (filters.search?.trim()) {
-        const normalized = filters.search.replace(/\s+/g, " ").trim();
-        const words = normalized.split(" ").filter(Boolean);
-
-        const SEARCH_FIELDS = [
-          "nombre",
-          "nombre_real",
-          "apellido",
-          "celular",
-          "email",
-          "instagram",
-        ] as const;
-
-        if (words.length === 1) {
-          // Single word — OR across all fields
-          const q = `%${words[0]}%`;
-          query = query.or(
-            SEARCH_FIELDS.map((f) => `${f}.ilike.${q}`).join(",")
-          );
-        } else {
-          // Multiple words — each word must appear in *any* field (AND between words)
-          for (const word of words) {
-            const q = `%${word}%`;
-            query = query.or(
-              SEARCH_FIELDS.map((f) => `${f}.ilike.${q}`).join(",")
-            );
-          }
+        const filter = buildSearchFilter(filters.search);
+        if (filter) {
+          query = query.or(filter);
         }
       }
 
@@ -112,8 +149,11 @@ export function useInfiniteLeads(filters: InfiniteLeadsFilters) {
     initialPageParam: 0,
     getNextPageParam: (lastPage, _allPages, lastPageParam) =>
       lastPage.length === LEADS_PAGE_SIZE ? (lastPageParam as number) + 1 : undefined,
-    staleTime: 30_000,
+    placeholderData: (previousData) => previousData,
+    staleTime: 60_000,
     refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    retry: 1,
   });
 }
 
@@ -189,15 +229,22 @@ export function useCreateLead() {
 
   return useMutation({
     mutationFn: async (lead: { nombre: string; setter_id: string; created_at?: string }) => {
-      // Check for duplicate by nombre (case-insensitive)
-      const normalized = lead.nombre.trim();
-      const { data: existing } = await getSupabase()
+      // Duplicate check aligned with search normalization and accent-insensitive comparison.
+      const normalized = normalizeStoredName(lead.nombre);
+      const canonical = canonicalName(normalized);
+      const probeToken = tokenizeSearch(normalized)[0] ?? normalizeSearchInput(normalized);
+      const probe = `%${escapeLikePattern(probeToken)}%`;
+
+      const { data: candidates, error: duplicateError } = await getSupabase()
         .from("leads")
         .select("id, nombre")
-        .ilike("nombre", normalized)
-        .limit(1);
-      if (existing && existing.length > 0) {
-        throw new Error(`Ya existe un lead con el nombre "${existing[0].nombre}"`);
+        .ilike("nombre", probe)
+        .limit(50);
+      if (duplicateError) throw duplicateError;
+
+      const existing = (candidates ?? []).find((row) => canonicalName(row.nombre) === canonical);
+      if (existing) {
+        throw new Error(`Ya existe un lead con el nombre "${existing.nombre}"`);
       }
 
       const row: Record<string, unknown> = {
@@ -230,25 +277,41 @@ export function useBulkCreateLeads() {
       // 1. Dedupe within the batch (case-insensitive)
       const seen = new Set<string>();
       const unique = leads.filter((l) => {
-        const key = l.nombre.trim().toLowerCase();
+        const key = canonicalName(l.nombre);
         if (seen.has(key)) return false;
         seen.add(key);
         return true;
       });
 
-      // 2. Check which names already exist in DB (case-insensitive)
-      const names = unique.map((l) => l.nombre.trim());
-      const orFilter = names.map((n) => `nombre.ilike.${n}`).join(",");
-      const { data: existing } = await getSupabase()
-        .from("leads")
-        .select("nombre")
-        .or(orFilter);
+      // 2. Fetch candidate existing names and compare canonically in-memory.
+      const probes = Array.from(
+        new Set(
+          unique
+            .map((l) => tokenizeSearch(l.nombre)[0] ?? normalizeSearchInput(l.nombre))
+            .filter(Boolean)
+        )
+      ).slice(0, 40);
+
+      let existing: { nombre: string }[] = [];
+      if (probes.length > 0) {
+        const orFilter = probes
+          .map((p) => `nombre.ilike.%${escapeLikePattern(p)}%`)
+          .join(",");
+
+        const { data, error } = await getSupabase()
+          .from("leads")
+          .select("nombre")
+          .or(orFilter);
+        if (error) throw error;
+        existing = (data ?? []) as { nombre: string }[];
+      }
+
       const existingLower = new Set(
-        (existing ?? []).map((l: { nombre: string }) => l.nombre.trim().toLowerCase())
+        existing.map((l) => canonicalName(l.nombre))
       );
 
-      const duplicates = unique.filter((l) => existingLower.has(l.nombre.trim().toLowerCase()));
-      const toInsert = unique.filter((l) => !existingLower.has(l.nombre.trim().toLowerCase()));
+      const duplicates = unique.filter((l) => existingLower.has(canonicalName(l.nombre)));
+      const toInsert = unique.filter((l) => !existingLower.has(canonicalName(l.nombre)));
 
       if (toInsert.length === 0) {
         throw new Error(
@@ -260,7 +323,7 @@ export function useBulkCreateLeads() {
 
       const rows = toInsert.map((l) => {
         const row: Record<string, unknown> = {
-          nombre: l.nombre.trim(),
+          nombre: normalizeStoredName(l.nombre),
           setter_id: l.setter_id,
           estado: "nuevo",
         };
