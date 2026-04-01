@@ -34,7 +34,7 @@ function LeadAddedToastContent({
   });
 
   return (
-    <div className="w-[360px] rounded-xl border bg-background shadow-lg p-4">
+    <div className="w-full sm:w-[420px] mx-auto flex flex-col rounded-xl border bg-background shadow-lg p-4">
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-start gap-3">
           <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center shrink-0">
@@ -114,6 +114,8 @@ export function showLeadAddedToast(opts: {
         onAgregarNota={opts.onAgregarNota}
       />
     ),
-    { duration: 6000 }
+    {
+      duration: 6000,
+    }
   );
 }

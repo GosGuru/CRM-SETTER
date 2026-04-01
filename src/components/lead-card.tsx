@@ -57,6 +57,7 @@ export const LeadCard = memo(function LeadCardInner({ lead, selectable, selected
   return (
     <Card
       onClick={handleCardClick}
+      style={{ contentVisibility: "auto", containIntrinsicSize: "0 80px" }}
       className={cn(
         "transition-all duration-200 cursor-pointer hover:shadow-md group",
         selected && "ring-2 ring-primary bg-primary/5",

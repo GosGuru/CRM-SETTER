@@ -50,7 +50,9 @@ import {
   HiOutlineEnvelope,
   HiOutlineEye,
   HiOutlineCog6Tooth,
+  HiOutlineBanknotes,
 } from "react-icons/hi2";
+import { useSettings, useUpdateSetting } from "@/hooks/use-settings";
 
 // ────────────────────────────────────
 // Tab: Perfil
@@ -508,6 +510,140 @@ function TemplatesTab() {
 }
 
 // ────────────────────────────────────
+// Tab: Comisiones y Precios
+// ────────────────────────────────────
+function CommissionsTab() {
+  const { data: settings, isLoading } = useSettings();
+  const updateSetting = useUpdateSetting();
+
+  const [cashPerAgenda, setCashPerAgenda] = useState("");
+  const [commissionRate, setCommissionRate] = useState("");
+  const [programPrice, setProgramPrice] = useState("");
+
+  // Sync form with loaded settings
+  if (settings && !cashPerAgenda && !commissionRate && !programPrice) {
+    setCashPerAgenda(String(settings.cash_per_agenda));
+    setCommissionRate(String(Math.round(settings.commission_rate * 100)));
+    setProgramPrice(String(settings.program_price));
+  }
+
+  const handleSave = () => {
+    const rate = parseFloat(commissionRate) / 100;
+    const cash = parseFloat(cashPerAgenda);
+    const price = parseFloat(programPrice);
+
+    if (isNaN(rate) || isNaN(cash) || isNaN(price)) {
+      toast.error("Ingresá valores válidos");
+      return;
+    }
+    if (rate <= 0 || rate > 1) {
+      toast.error("La tasa debe estar entre 1% y 100%");
+      return;
+    }
+
+    const ops = [
+      { key: "cash_per_agenda", value: String(cash) },
+      { key: "commission_rate", value: String(rate) },
+      { key: "program_price", value: String(price) },
+    ];
+
+    Promise.all(ops.map((op) => updateSetting.mutateAsync(op)))
+      .then(() => toast.success("Configuración guardada"))
+      .catch((err) => toast.error(`Error: ${err instanceof Error ? err.message : "desconocido"}`));
+  };
+
+  if (isLoading) {
+    return <div className="h-48 bg-muted animate-pulse rounded-lg" />;
+  }
+
+  const cash = parseFloat(cashPerAgenda) || 0;
+  const rate = (parseFloat(commissionRate) || 0) / 100;
+  const price = parseFloat(programPrice) || 0;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <HiOutlineBanknotes className="h-5 w-5 text-green-600" />
+          Comisiones y precios
+        </CardTitle>
+        <CardDescription>Configurá los valores que se usan para calcular tu comisión en el dashboard.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        {/* Cash por agenda */}
+        <div className="space-y-1.5">
+          <Label htmlFor="cash-per-agenda">Valor por agenda inicial ($)</Label>
+          <div className="relative max-w-xs">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
+            <Input
+              id="cash-per-agenda"
+              type="number"
+              min={0}
+              step={0.01}
+              value={cashPerAgenda}
+              onChange={(e) => setCashPerAgenda(e.target.value)}
+              className="pl-7"
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Monto total que recibiós por cada call agendada.
+          </p>
+        </div>
+
+        {/* Comisión % */}
+        <div className="space-y-1.5">
+          <Label htmlFor="commission-rate">Tu comisión (%)</Label>
+          <div className="relative max-w-xs">
+            <Input
+              id="commission-rate"
+              type="number"
+              min={1}
+              max={100}
+              step={0.1}
+              value={commissionRate}
+              onChange={(e) => setCommissionRate(e.target.value)}
+              className="pr-7"
+            />
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">%</span>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Tu porcentaje sobre cada venta. Actualmente: {commissionRate}% de ${cash} = <strong className="text-green-700">${(cash * rate).toFixed(2)}</strong> por agenda.
+          </p>
+        </div>
+
+        {/* Precio del programa */}
+        <div className="space-y-1.5">
+          <Label htmlFor="program-price">Precio del programa ($)</Label>
+          <div className="relative max-w-xs">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
+            <Input
+              id="program-price"
+              type="number"
+              min={0}
+              step={0.01}
+              value={programPrice}
+              onChange={(e) => setProgramPrice(e.target.value)}
+              className="pl-7"
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Precio actual del programa. Tu comisión por programa completo: <strong className="text-green-700">${(price * rate).toFixed(2)}</strong>
+          </p>
+        </div>
+
+        <Button
+          onClick={handleSave}
+          disabled={updateSetting.isPending}
+          className="cursor-pointer"
+        >
+          {updateSetting.isPending ? "Guardando…" : "Guardar configuración"}
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ────────────────────────────────────
 // Página principal de Settings
 // ────────────────────────────────────
 export default function SettingsPage() {
@@ -532,6 +668,10 @@ export default function SettingsPage() {
             <HiOutlineChatBubbleLeftRight className="mr-1 h-4 w-4" />
             Plantillas
           </TabsTrigger>
+          <TabsTrigger value="comisiones" className="cursor-pointer">
+            <HiOutlineBanknotes className="mr-1 h-4 w-4" />
+            Comisiones
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="perfil">
@@ -544,6 +684,10 @@ export default function SettingsPage() {
 
         <TabsContent value="plantillas">
           <TemplatesTab />
+        </TabsContent>
+
+        <TabsContent value="comisiones">
+          <CommissionsTab />
         </TabsContent>
       </Tabs>
     </div>

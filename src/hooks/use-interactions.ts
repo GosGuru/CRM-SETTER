@@ -68,3 +68,24 @@ export function useBulkCreateInteractions() {
     },
   });
 }
+
+export function useDeleteInteraction() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ id, lead_id }: { id: string; lead_id: string }) => {
+      const { error } = await getSupabase()
+        .from("interactions")
+        .delete()
+        .eq("id", id);
+      if (error) throw error;
+      return { id, lead_id };
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: ["interactions", variables.lead_id],
+      });
+      queryClient.invalidateQueries({ queryKey: ["stats"] });
+    },
+  });
+}

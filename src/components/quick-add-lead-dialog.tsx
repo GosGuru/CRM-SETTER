@@ -58,12 +58,12 @@ export function QuickAddLeadDialog() {
 
     const loadingId = toast.loading("Cargando lead…");
 
-    // Use actual current time for today, noon for past dates
+    // Use actual current time for today, local noon (→ UTC) for other dates
     const now = new Date();
     const todayStr = localDateStr(now);
     const createdAt = submittedFecha === todayStr
       ? now.toISOString()
-      : `${submittedFecha}T12:00:00`;
+      : new Date(`${submittedFecha}T12:00:00`).toISOString();
 
     createLead.mutate(
       {
@@ -95,7 +95,10 @@ export function QuickAddLeadDialog() {
       open={open}
       onOpenChange={(nextOpen) => {
         setOpen(nextOpen);
-        if (!nextOpen) setNombre("");
+        if (!nextOpen) {
+          setNombre("");
+          setFecha(localDateStr()); // siempre resetear al día de hoy al cerrar
+        }
       }}
     >
       <DialogContent className="sm:max-w-[400px]">

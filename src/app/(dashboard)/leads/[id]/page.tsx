@@ -3,13 +3,15 @@
 import { use, useState } from "react";
 import { localDateStr } from "@/lib/utils";
 import { useLead, useUpdateLead } from "@/hooks/use-leads";
-import { useInteractions, useCreateInteraction } from "@/hooks/use-interactions";
-import { useLeadFollowups, useCreateFollowup } from "@/hooks/use-followups";
+import { useInteractions, useCreateInteraction, useDeleteInteraction } from "@/hooks/use-interactions";
+import { useLeadFollowups } from "@/hooks/use-followups";
 import { useClosers, useCurrentUser } from "@/hooks/use-users";
 import { PreCallSheet } from "@/components/pre-call-sheet";
+import { ScheduleFupDialog } from "@/components/schedule-fup-dialog";
 
 import { CalendlyDataForm } from "@/components/calendly-data-form";
 import { StatusBadge } from "@/components/status-badge";
+import { PaymentSection } from "@/components/payment-section";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -35,6 +37,7 @@ import {
   HiOutlineCheckCircle,
   HiOutlineClock,
   HiOutlineClipboardDocumentCheck,
+  HiOutlineTrash,
 } from "react-icons/hi2";
 import Link from "next/link";
 import type { LeadEstado, InteractionTipo } from "@/types/database";
@@ -66,37 +69,26 @@ export default function LeadDetailPage({
   const { data: currentUser } = useCurrentUser();
   const updateLead = useUpdateLead();
   const createInteraction = useCreateInteraction();
+  const deleteInteraction = useDeleteInteraction();
   const { data: leadFups } = useLeadFollowups(id);
-  const createFollowup = useCreateFollowup();
 
   const [newNote, setNewNote] = useState("");
   const [seguimientoOpen, setSeguimientoOpen] = useState(false);
-  const [fupPickerOpen, setFupPickerOpen] = useState(false);
+  const [fupDialogOpen, setFupDialogOpen] = useState(false);
+  const [fupDefaultDate, setFupDefaultDate] = useState<string | undefined>();
 
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
   const tomorrowStr = localDateStr(tomorrow);
 
   const handleFupManana = () => {
-    if (!currentUser || !lead) return;
-    createFollowup.mutate(
-      { lead_id: lead.id, user_id: currentUser.id, fecha_programada: tomorrowStr },
-      { onSuccess: () => toast.success("FUP programado para mañana") }
-    );
+    setFupDefaultDate(tomorrowStr);
+    setFupDialogOpen(true);
   };
 
-  const handleFupDate = (date: Date) => {
-    if (!currentUser || !lead) return;
-    const fechaStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-    createFollowup.mutate(
-      { lead_id: lead.id, user_id: currentUser.id, fecha_programada: fechaStr },
-      {
-        onSuccess: () => {
-          toast.success(`FUP programado para ${date.toLocaleDateString("es-AR", { day: "numeric", month: "long" })}`);
-          setFupPickerOpen(false);
-        },
-      }
-    );
+  const handleProgramarFup = () => {
+    setFupDefaultDate(undefined);
+    setFupDialogOpen(true);
   };
 
   const handleSeguimiento = (date: Date) => {
@@ -125,7 +117,20 @@ export default function LeadDetailPage({
     if (!currentUser || !lead) return;
     createInteraction.mutate(
       { lead_id: lead.id, user_id: currentUser.id, tipo, contenido },
-      { onSuccess: () => toast.success("Acción registrada") }
+      {
+        onSuccess: () => toast.success("Acción registrada"),
+        onError: (err) => toast.error(`Error: ${err instanceof Error ? err.message : "desconocido"}`),
+      }
+    );
+  };
+
+  const handleDeleteInteraction = (interactionId: string) => {
+    deleteInteraction.mutate(
+      { id: interactionId, lead_id: id },
+      {
+        onSuccess: () => toast.success("Interacción eliminada"),
+        onError: (err) => toast.error(`No se pudo eliminar: ${err instanceof Error ? err.message : "error desconocido"}`),
+      }
     );
   };
 
@@ -144,6 +149,7 @@ export default function LeadDetailPage({
           });
           toast.success(`Estado actualizado a "${nuevoEstado}"`);
         },
+        onError: (err) => toast.error(`No se pudo cambiar estado: ${err instanceof Error ? err.message : "error"}`),
       }
     );
   };
@@ -154,6 +160,7 @@ export default function LeadDetailPage({
       { id: lead.id, closer_id: closerId },
       {
         onSuccess: () => toast.success("Closer asignado"),
+        onError: (err) => toast.error(`No se pudo asignar: ${err instanceof Error ? err.message : "error"}`),
       }
     );
   };
@@ -173,6 +180,7 @@ export default function LeadDetailPage({
           setNewNote("");
           toast.success("Nota agregada");
         },
+        onError: (err) => toast.error(`Error al guardar nota: ${err instanceof Error ? err.message : "error"}`),
       }
     );
   };
@@ -219,6 +227,14 @@ export default function LeadDetailPage({
         </div>
       </div>
 
+      {/* FUP Dialog — shared across both sections */}
+      <ScheduleFupDialog
+        leadId={id}
+        open={fupDialogOpen}
+        onOpenChange={setFupDialogOpen}
+        defaultDate={fupDefaultDate}
+      />
+
       {/* Contenido condicional: sin agenda vs con agenda */}
       {!tieneAgenda ? (
         /* ---- MODO SIN AGENDA: formulario para cargar datos de Calendly ---- */
@@ -263,33 +279,18 @@ export default function LeadDetailPage({
                   variant="outline"
                   size="sm"
                   className="cursor-pointer text-indigo-600 border-indigo-200 hover:bg-indigo-50"
-                  disabled={createFollowup.isPending}
                   onClick={handleFupManana}
                 >
                   <HiOutlineClipboardDocumentCheck className="mr-1.5 h-4 w-4" /> FUP Mañana
                 </Button>
-                <Popover open={fupPickerOpen} onOpenChange={setFupPickerOpen}>
-                  <PopoverTrigger
-                    render={
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="cursor-pointer"
-                        disabled={createFollowup.isPending}
-                      />
-                    }
-                  >
-                    <HiOutlineClipboardDocumentCheck className="mr-1.5 h-4 w-4" /> Programar FUP
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0">
-                    <Calendar
-                      mode="single"
-                      onSelect={(day) => { if (day) handleFupDate(day); }}
-                      disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
-                      defaultMonth={new Date()}
-                    />
-                  </PopoverContent>
-                </Popover>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="cursor-pointer"
+                  onClick={handleProgramarFup}
+                >
+                  <HiOutlineClipboardDocumentCheck className="mr-1.5 h-4 w-4" /> Programar FUP
+                </Button>
                 <Popover open={seguimientoOpen} onOpenChange={setSeguimientoOpen}>
                   <PopoverTrigger
                     render={
@@ -333,6 +334,9 @@ export default function LeadDetailPage({
               </CardContent>
             </Card>
 
+            {/* Pago del programa */}
+            <PaymentSection key={`ps-${lead.id}-${lead.updated_at}`} lead={lead} />
+
             {/* Agregar nota */}
             <Card>
               <CardHeader className="pb-3">
@@ -367,7 +371,7 @@ export default function LeadDetailPage({
                     {interactions.map((interaction) => {
                       const Icon = interactionIcons[interaction.tipo];
                       return (
-                        <div key={interaction.id} className="flex gap-3">
+                        <div key={interaction.id} className="flex gap-3 group">
                           <div className="mt-0.5">
                             <Icon className="h-4 w-4 text-muted-foreground" />
                           </div>
@@ -386,6 +390,15 @@ export default function LeadDetailPage({
                               )}
                             </p>
                           </div>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteInteraction(interaction.id)}
+                            disabled={deleteInteraction.isPending}
+                            aria-label="Eliminar interacción"
+                            className="shrink-0 self-start mt-0.5 p-1 rounded text-muted-foreground/40 hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
+                          >
+                            <HiOutlineTrash className="h-3.5 w-3.5" />
+                          </button>
                         </div>
                       );
                     })}
@@ -446,7 +459,6 @@ export default function LeadDetailPage({
                   variant="outline"
                   size="sm"
                   className="cursor-pointer text-indigo-600 border-indigo-200 hover:bg-indigo-50"
-                  disabled={createFollowup.isPending}
                   onClick={handleFupManana}
                 >
                   <HiOutlineClipboardDocumentCheck className="mr-1.5 h-4 w-4" /> FUP Mañana
@@ -542,6 +554,9 @@ export default function LeadDetailPage({
               </CardContent>
             </Card>
 
+            {/* Pago del programa */}
+            <PaymentSection key={`ps2-${lead.id}-${lead.updated_at}`} lead={lead} />
+
             {/* Agregar nota */}
             <Card>
               <CardHeader className="pb-3">
@@ -576,7 +591,7 @@ export default function LeadDetailPage({
                     {interactions.map((interaction) => {
                       const Icon = interactionIcons[interaction.tipo];
                       return (
-                        <div key={interaction.id} className="flex gap-3">
+                        <div key={interaction.id} className="flex gap-3 group">
                           <div className="mt-0.5">
                             <Icon className="h-4 w-4 text-muted-foreground" />
                           </div>
@@ -595,6 +610,15 @@ export default function LeadDetailPage({
                               )}
                             </p>
                           </div>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteInteraction(interaction.id)}
+                            disabled={deleteInteraction.isPending}
+                            aria-label="Eliminar interacción"
+                            className="shrink-0 self-start mt-0.5 p-1 rounded text-muted-foreground/40 hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
+                          >
+                            <HiOutlineTrash className="h-3.5 w-3.5" />
+                          </button>
                         </div>
                       );
                     })}

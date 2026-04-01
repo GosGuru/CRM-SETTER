@@ -19,8 +19,10 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { useFollowUps } from "@/hooks/use-leads";
 import { useFollowups, useCompleteFollowup, useDeleteFollowup } from "@/hooks/use-followups";
-import { useStats, useKPIHistory, CASH_PER_AGENDA } from "@/hooks/use-stats";
+import { useStats, useKPIHistory } from "@/hooks/use-stats";
 import { useCurrentUser } from "@/hooks/use-users";
+import { KPIDetailDialog } from "@/components/kpi-detail-dialog";
+import type { KPIDetailType } from "@/types/database";
 import { useUIStore } from "@/stores/ui-store";
 import { toast } from "sonner";
 import { es } from "date-fns/locale";
@@ -46,8 +48,94 @@ import {
   HiOutlineBellAlert,
   HiOutlineClipboardDocumentList,
   HiOutlineClipboardDocumentCheck,
+  HiOutlineArrowDownTray,
 } from "react-icons/hi2";
 import { CalendarIcon } from "lucide-react";
+
+const MONTH_NAMES: { value: number; label: string }[] = [
+  { value: 1, label: "Enero" }, { value: 2, label: "Febrero" }, { value: 3, label: "Marzo" },
+  { value: 4, label: "Abril" }, { value: 5, label: "Mayo" }, { value: 6, label: "Junio" },
+  { value: 7, label: "Julio" }, { value: 8, label: "Agosto" }, { value: 9, label: "Septiembre" },
+  { value: 10, label: "Octubre" }, { value: 11, label: "Noviembre" }, { value: 12, label: "Diciembre" },
+];
+
+function ExportKPIsButton() {
+  const now = new Date();
+  const [month, setMonth] = useState(now.getMonth() + 1);
+  const [year, setYear] = useState(now.getFullYear());
+  const [loading, setLoading] = useState(false);
+
+  const handleExport = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/export/kpis?month=${month}&year=${year}`);
+      if (!res.ok) throw new Error("Error al generar el Excel");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `KPIs_${MONTH_NAMES.find((m) => m.value === month)?.label}_${year}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("Excel exportado correctamente");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Error al exportar");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const years = [now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1];
+
+  return (
+    <Card className="animate-blur-in">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-lg flex items-center gap-2">
+          <HiOutlineArrowDownTray className="h-5 w-5 text-emerald-500" />
+          Exportar KPIs — Excel
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2">
+            <label htmlFor="export-month" className="text-sm text-muted-foreground whitespace-nowrap">Mes</label>
+            <select
+              id="export-month"
+              value={month}
+              onChange={(e) => setMonth(parseInt(e.target.value, 10))}
+              className="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring cursor-pointer"
+            >
+              {MONTH_NAMES.map((m) => (
+                <option key={m.value} value={m.value}>{m.label}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-center gap-2">
+            <label htmlFor="export-year" className="text-sm text-muted-foreground whitespace-nowrap">Año</label>
+            <select
+              id="export-year"
+              value={year}
+              onChange={(e) => setYear(parseInt(e.target.value, 10))}
+              className="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring cursor-pointer"
+            >
+              {years.map((y) => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
+          </div>
+          <Button
+            onClick={handleExport}
+            disabled={loading}
+            className="cursor-pointer bg-emerald-600 hover:bg-emerald-700"
+          >
+            <HiOutlineArrowDownTray className="mr-1.5 h-4 w-4" />
+            {loading ? "Generando…" : "Descargar Excel"}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 function StatCard({
   title,
@@ -56,6 +144,7 @@ function StatCard({
   icon: Icon,
   color,
   delay,
+  onClick,
 }: {
   title: string;
   value: number | string;
@@ -63,9 +152,13 @@ function StatCard({
   icon: React.ElementType;
   color: string;
   delay?: number;
+  onClick?: () => void;
 }) {
   return (
-    <Card className={`animate-blur-in-scale${delay ? ` stagger-${delay}` : ""} transition-shadow hover:shadow-md`}>
+    <Card
+      className={`animate-blur-in-scale${delay ? ` stagger-${delay}` : ""} transition-shadow hover:shadow-md${onClick ? " cursor-pointer hover:ring-2 hover:ring-primary/20" : ""}`}
+      onClick={onClick}
+    >
       <CardContent className="flex items-center gap-4 py-4 px-5">
         <div className={`rounded-xl p-2.5 ${color} shadow-sm`}>
           <Icon className="h-5 w-5 text-white" />
@@ -107,6 +200,15 @@ export default function DashboardPage() {
   const deleteFup = useDeleteFollowup();
   const { data: currentUser } = useCurrentUser();
   const [calendarOpen, setCalendarOpen] = useState(false);
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [detailTipo, setDetailTipo] = useState<KPIDetailType | null>(null);
+  const [detailFecha, setDetailFecha] = useState(fecha);
+
+  const openDetail = (tipo: KPIDetailType, fechaISO?: string) => {
+    setDetailTipo(tipo);
+    setDetailFecha(fechaISO ?? fecha);
+    setDetailOpen(true);
+  };
 
   const fupsCompletados = fups?.filter((f) => f.completado).length ?? 0;
   const fupsTotal = fups?.length ?? 0;
@@ -135,6 +237,7 @@ export default function DashboardPage() {
   // Data para el chart
   const chartData = kpiHistory?.map((row) => ({
     fecha: formatFecha(row.fecha),
+    fechaISO: row.fecha,
     Inbound: row.inbound_nuevo,
     FUPs: row.fups,
     "Cal. Env.": row.calendarios_enviados,
@@ -143,8 +246,21 @@ export default function DashboardPage() {
 
   const selectedDate = new Date(fecha + "T12:00:00");
 
+  const fechaLabel = new Date(fecha + "T12:00:00").toLocaleDateString("es-AR", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  });
+
   return (
     <div className="space-y-6">
+      <KPIDetailDialog
+        open={detailOpen}
+        onOpenChange={setDetailOpen}
+        tipo={detailTipo}
+        fecha={detailFecha}
+        fechaLabel={detailFecha === fecha ? fechaLabel : new Date(detailFecha + "T12:00:00").toLocaleDateString("es-AR", { weekday: "short", day: "numeric", month: "short" })}
+      />
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 animate-blur-fade">
         <div>
@@ -245,6 +361,7 @@ export default function DashboardPage() {
             icon={HiOutlineUserPlus}
             color="bg-blue-600"
             delay={1}
+            onClick={() => openDetail("inbound")}
           />
           <StatCard
             title="FUPS"
@@ -252,6 +369,7 @@ export default function DashboardPage() {
             icon={HiOutlinePhoneArrowUpRight}
             color="bg-indigo-600"
             delay={2}
+            onClick={() => openDetail("fups")}
           />
           <StatCard
             title="Cal. Enviados"
@@ -259,6 +377,7 @@ export default function DashboardPage() {
             icon={HiOutlinePaperAirplane}
             color="bg-cyan-600"
             delay={3}
+            onClick={() => openDetail("cal_enviados")}
           />
           <StatCard
             title="Calls Agendadas"
@@ -266,6 +385,7 @@ export default function DashboardPage() {
             icon={HiOutlineCalendarDays}
             color="bg-amber-600"
             delay={4}
+            onClick={() => openDetail("calls_agendadas")}
           />
           <StatCard
             title="Tasa de Agenda"
@@ -274,6 +394,7 @@ export default function DashboardPage() {
             icon={HiOutlineChartBarSquare}
             color="bg-emerald-600"
             delay={5}
+            onClick={() => openDetail("tasa")}
           />
           <StatCard
             title="Cash Collected"
@@ -281,6 +402,7 @@ export default function DashboardPage() {
             icon={HiOutlineBanknotes}
             color="bg-green-600"
             delay={6}
+            onClick={() => openDetail("cash")}
           />
         </div>
       )}
@@ -314,12 +436,42 @@ export default function DashboardPage() {
                 </TableHeader>
                 <TableBody>
                   <TableRow>
-                    <TableCell className="text-lg font-semibold">{kpi.inbound_nuevo}</TableCell>
-                    <TableCell className="text-lg font-semibold">{kpi.fups}</TableCell>
-                    <TableCell className="text-lg font-semibold">{kpi.calendarios_enviados}</TableCell>
-                    <TableCell className="text-lg font-semibold">{kpi.calls_agendadas}</TableCell>
-                    <TableCell className="text-lg font-semibold">{kpi.tasa_agenda}%</TableCell>
-                    <TableCell className="text-lg font-semibold">${kpi.cash_collected}</TableCell>
+                    <TableCell
+                      className="text-lg font-semibold cursor-pointer hover:text-blue-600 hover:underline"
+                      onClick={() => openDetail("inbound")}
+                    >
+                      {kpi.inbound_nuevo}
+                    </TableCell>
+                    <TableCell
+                      className="text-lg font-semibold cursor-pointer hover:text-indigo-600 hover:underline"
+                      onClick={() => openDetail("fups")}
+                    >
+                      {kpi.fups}
+                    </TableCell>
+                    <TableCell
+                      className="text-lg font-semibold cursor-pointer hover:text-cyan-600 hover:underline"
+                      onClick={() => openDetail("cal_enviados")}
+                    >
+                      {kpi.calendarios_enviados}
+                    </TableCell>
+                    <TableCell
+                      className="text-lg font-semibold cursor-pointer hover:text-amber-600 hover:underline"
+                      onClick={() => openDetail("calls_agendadas")}
+                    >
+                      {kpi.calls_agendadas}
+                    </TableCell>
+                    <TableCell
+                      className="text-lg font-semibold cursor-pointer hover:text-emerald-600 hover:underline"
+                      onClick={() => openDetail("tasa")}
+                    >
+                      {kpi.tasa_agenda}%
+                    </TableCell>
+                    <TableCell
+                      className="text-lg font-semibold cursor-pointer hover:text-green-600 hover:underline"
+                      onClick={() => openDetail("cash")}
+                    >
+                      ${kpi.cash_collected}
+                    </TableCell>
                   </TableRow>
                 </TableBody>
               </Table>
@@ -375,10 +527,34 @@ export default function DashboardPage() {
                     }}
                   />
                   <Legend wrapperStyle={{ fontSize: "12px" }} />
-                  <Bar dataKey="Inbound" fill="#2563eb" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="FUPs" fill="#4f46e5" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="Cal. Env." fill="#0891b2" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="Agendadas" fill="#d97706" radius={[4, 4, 0, 0]} />
+                  <Bar
+                    dataKey="Inbound"
+                    fill="#2563eb"
+                    radius={[4, 4, 0, 0]}
+                    style={{ cursor: "pointer" }}
+                    onClick={(data: unknown) => openDetail("inbound", (data as { fechaISO?: string }).fechaISO)}
+                  />
+                  <Bar
+                    dataKey="FUPs"
+                    fill="#4f46e5"
+                    radius={[4, 4, 0, 0]}
+                    style={{ cursor: "pointer" }}
+                    onClick={(data: unknown) => openDetail("fups", (data as { fechaISO?: string }).fechaISO)}
+                  />
+                  <Bar
+                    dataKey="Cal. Env."
+                    fill="#0891b2"
+                    radius={[4, 4, 0, 0]}
+                    style={{ cursor: "pointer" }}
+                    onClick={(data: unknown) => openDetail("cal_enviados", (data as { fechaISO?: string }).fechaISO)}
+                  />
+                  <Bar
+                    dataKey="Agendadas"
+                    fill="#d97706"
+                    radius={[4, 4, 0, 0]}
+                    style={{ cursor: "pointer" }}
+                    onClick={(data: unknown) => openDetail("calls_agendadas", (data as { fechaISO?: string }).fechaISO)}
+                  />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -466,6 +642,9 @@ export default function DashboardPage() {
           </Card>
         )}
       </div>
+
+      {/* Exportar KPIs */}
+      <ExportKPIsButton />
     </div>
   );
 }

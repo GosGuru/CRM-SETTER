@@ -1,10 +1,17 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useLayoutEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { createClient } from "@/lib/supabase/client";
 import { localDateStr } from "@/lib/utils";
-import { useLeads, useBulkUpdateLeads, useBulkDeleteLeads, useTogglePin } from "@/hooks/use-leads";
+import {
+  useInfiniteLeads,
+  useBulkUpdateLeads,
+  useBulkDeleteLeads,
+  useTogglePin,
+  type SortOption,
+} from "@/hooks/use-leads";
 import { useBulkCreateInteractions } from "@/hooks/use-interactions";
 import { useBulkCreateFollowups } from "@/hooks/use-followups";
 import { useClosers, useCurrentUser } from "@/hooks/use-users";
@@ -25,6 +32,14 @@ import {
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { CSVUpload } from "@/components/csv-upload";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import {
   HiOutlinePlusCircle,
   HiOutlineCheckCircle,
@@ -63,8 +78,6 @@ const estadoOptions: { value: LeadEstado; label: string }[] = [
   { value: "pagó", label: "Pagó" },
 ];
 
-type SortOption = "recientes" | "antiguos" | "az" | "za" | "calificados";
-
 const sortOptions: { value: SortOption; label: string; icon: React.ReactNode }[] = [
   { value: "recientes", label: "Recientes", icon: <HiOutlineBarsArrowDown className="h-3.5 w-3.5" /> },
   { value: "antiguos", label: "Antiguos", icon: <HiOutlineBarsArrowUp className="h-3.5 w-3.5" /> },
@@ -93,7 +106,8 @@ function groupByDate(leads: Lead[]): { date: string; label: string; leads: Lead[
   const groups = new Map<string, Lead[]>();
 
   for (const lead of leads) {
-    const dateKey = lead.created_at.slice(0, 10);
+    // Parse the UTC timestamp and convert to local date to avoid cross-midnight mis-grouping
+    const dateKey = localDateStr(new Date(lead.created_at));
     if (!groups.has(dateKey)) groups.set(dateKey, []);
     groups.get(dateKey)!.push(lead);
   }
@@ -101,7 +115,8 @@ function groupByDate(leads: Lead[]): { date: string; label: string; leads: Lead[
   const sorted = [...groups.entries()].sort((a, b) => b[0].localeCompare(a[0]));
 
   const hoy = localDateStr();
-  const ayer = localDateStr(new Date(Date.now() - 86400000));
+  const ayerDate = new Date(); ayerDate.setDate(ayerDate.getDate() - 1);
+  const ayer = localDateStr(ayerDate);
 
   return sorted.map(([date, leads]) => {
     let label: string;
@@ -120,10 +135,18 @@ function groupByDate(leads: Lead[]): { date: string; label: string; leads: Lead[
   });
 }
 
+// ── Virtual item types ────────────────────────────────────────────
+type FlatItem =
+  | { type: "date-header"; date: string; label: string; dateLeads: Lead[] }
+  | { type: "lead"; lead: Lead; date: string };
+
+// Estimated heights for the virtualizer
+const HEADER_HEIGHT = 36;
+const LEAD_HEIGHT = 80;
+
 export default function LeadsPage() {
   const filtroEstado = useUIStore((s) => s.filtroEstado);
   const setFiltroEstado = useUIStore((s) => s.setFiltroEstado);
-  const { data: leads, isLoading } = useLeads(filtroEstado);
   const { data: closers } = useClosers();
   const { data: currentUser } = useCurrentUser();
   const bulkUpdate = useBulkUpdateLeads();
@@ -132,17 +155,58 @@ export default function LeadsPage() {
   const bulkInteractions = useBulkCreateInteractions();
   const bulkFollowups = useBulkCreateFollowups();
 
-  // Última interacción por lead (para filtro "con notas" y preview en card)
+  // ── Search debounce (300 ms) ───────────────────────────────────
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  // ── Filters & sort ────────────────────────────────────────────
+  const [dateFilter, setDateFilter] = useState<string>("todos");
+  const [filterDateOpen, setFilterDateOpen] = useState(false);
+  const [customDate, setCustomDate] = useState<Date | null>(null);
+  const [soloConNotas, setSoloConNotas] = useState(false);
+  const [sortBy, setSortBy] = useState<SortOption>("recientes");
+
+  // ── Infinite leads query (server-side filters + pagination) ───
+  const {
+    data,
+    isLoading,
+    isFetchingNextPage,
+    hasNextPage,
+    fetchNextPage,
+  } = useInfiniteLeads({
+    filtroEstado,
+    search: debouncedSearch,
+    dateFilter,
+    sortBy,
+  });
+
+  // Flatten pages
+  const allLeads = useMemo(() => {
+    const flat = data?.pages.flat() ?? [];
+    if (sortBy === "calificados") {
+      return [...flat].sort((a, b) => qualificationScore(b) - qualificationScore(a));
+    }
+    return flat;
+  }, [data, sortBy]);
+
+  // ── Interactions map — only for loaded lead IDs ───────────────
+  const loadedIds = useMemo(() => allLeads.map((l) => l.id), [allLeads]);
+
   const { data: interactionsMap } = useQuery({
-    queryKey: ["leads-last-interactions"],
+    queryKey: ["leads-last-interactions", loadedIds],
     queryFn: async () => {
+      if (loadedIds.length === 0) return new Map<string, { contenido: string; tipo: string; created_at: string }>();
       const supabase = createClient();
       const { data, error } = await supabase
         .from("interactions")
         .select("lead_id, contenido, tipo, created_at")
+        .in("lead_id", loadedIds)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      // Mapa: lead_id → última interacción (la primera por orden desc)
       const map = new Map<string, { contenido: string; tipo: string; created_at: string }>();
       for (const row of data ?? []) {
         if (!map.has(row.lead_id)) {
@@ -152,81 +216,91 @@ export default function LeadsPage() {
       return map;
     },
     staleTime: 60_000,
+    enabled: loadedIds.length > 0,
   });
 
+  // ── Build flat virtual items array ────────────────────────────
+  const useDateGrouping = sortBy === "recientes" || sortBy === "antiguos";
+
+  const flatItems = useMemo((): FlatItem[] => {
+    const leads = soloConNotas && interactionsMap
+      ? allLeads.filter((l) => interactionsMap.has(l.id))
+      : allLeads;
+
+    if (!useDateGrouping) {
+      return leads.map((lead) => ({
+        type: "lead" as const,
+        lead,
+        date: lead.created_at.slice(0, 10),
+      }));
+    }
+
+    const groups = groupByDate(leads);
+    const items: FlatItem[] = [];
+    for (const { date, label, leads: dateLeads } of groups) {
+      items.push({ type: "date-header", date, label, dateLeads });
+      for (const lead of dateLeads) {
+        items.push({ type: "lead", lead, date });
+      }
+    }
+    return items;
+  }, [allLeads, useDateGrouping, soloConNotas, interactionsMap]);
+
+  // ── Virtualizer setup ─────────────────────────────────────────
+  const listContainerRef = useRef<HTMLDivElement>(null);
+  const scrollElementRef = useRef<HTMLElement | null>(null);
+  const [scrollMargin, setScrollMargin] = useState(0);
+
+  useLayoutEffect(() => {
+    scrollElementRef.current = document.querySelector("main");
+  }, []);
+
+  // Compute the offset of the list container from the top of <main>
+  // useLayoutEffect prevents a one-frame misplacement when data first loads
+  useLayoutEffect(() => {
+    const update = () => {
+      if (!listContainerRef.current || !scrollElementRef.current) return;
+      const mainRect = scrollElementRef.current.getBoundingClientRect();
+      const listRect = listContainerRef.current.getBoundingClientRect();
+      setScrollMargin(listRect.top - mainRect.top + scrollElementRef.current.scrollTop);
+    };
+    update();
+  }, [isLoading, flatItems.length]);
+
+  const virtualizer = useVirtualizer({
+    count: flatItems.length,
+    getScrollElement: () => scrollElementRef.current,
+    estimateSize: (index) =>
+      flatItems[index]?.type === "date-header" ? HEADER_HEIGHT : LEAD_HEIGHT,
+    overscan: 5,
+    scrollMargin,
+    measureElement:
+      typeof window !== "undefined" && navigator.userAgent.indexOf("Firefox") === -1
+        ? (element) => element?.getBoundingClientRect().height
+        : undefined,
+  });
+
+  // ── Infinite scroll observer ──────────────────────────────────
+  const bottomRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!bottomRef.current || !hasNextPage || isFetchingNextPage) return;
+    const root = scrollElementRef.current ?? undefined;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) fetchNextPage();
+      },
+      { threshold: 0, rootMargin: "300px", root }
+    );
+    observer.observe(bottomRef.current);
+    return () => observer.disconnect();
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+
+  // ── Bulk selection ────────────────────────────────────────────
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [selectMode, setSelectMode] = useState(false);
-  const [search, setSearch] = useState("");
   const [datePickerOpen, setDatePickerOpen] = useState(false);
   const [seguimientoPickerOpen, setSeguimientoPickerOpen] = useState(false);
   const [fupPickerOpen, setFupPickerOpen] = useState(false);
-  const [dateFilter, setDateFilter] = useState<string>("todos");
-  const [filterDateOpen, setFilterDateOpen] = useState(false);
-  const [customDate, setCustomDate] = useState<Date | null>(null);
-  const [soloConNotas, setSoloConNotas] = useState(false);
-  const [sortBy, setSortBy] = useState<SortOption>("recientes");
-
-  const filteredLeads = useMemo(() => {
-    if (!leads) return [];
-    let result = leads;
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      result = result.filter(
-        (l) =>
-          l.nombre.toLowerCase().includes(q) ||
-          l.celular?.toLowerCase().includes(q) ||
-          l.email?.toLowerCase().includes(q) ||
-          l.instagram?.toLowerCase().includes(q)
-      );
-    }
-    if (dateFilter !== "todos") {
-      const now = new Date();
-      const todayStr = localDateStr(now);
-      const yesterdayStr = localDateStr(new Date(now.getTime() - 86400000));
-
-      if (dateFilter === "hoy") {
-        result = result.filter((l) => l.created_at.slice(0, 10) === todayStr);
-      } else if (dateFilter === "ayer") {
-        result = result.filter((l) => l.created_at.slice(0, 10) === yesterdayStr);
-      } else if (dateFilter === "semana") {
-        const weekAgo = localDateStr(new Date(now.getTime() - 7 * 86400000));
-        result = result.filter((l) => l.created_at.slice(0, 10) >= weekAgo);
-      } else {
-        // custom YYYY-MM-DD
-        result = result.filter((l) => l.created_at.slice(0, 10) === dateFilter);
-      }
-    }
-    if (soloConNotas && interactionsMap) {
-      result = result.filter((l) => interactionsMap.has(l.id));
-    }
-    return result;
-  }, [leads, search, dateFilter, soloConNotas, interactionsMap]);
-
-  const sortedLeads = useMemo(() => {
-    const sorted = [...filteredLeads];
-    switch (sortBy) {
-      case "recientes":
-        sorted.sort((a, b) => b.created_at.localeCompare(a.created_at));
-        break;
-      case "antiguos":
-        sorted.sort((a, b) => a.created_at.localeCompare(b.created_at));
-        break;
-      case "az":
-        sorted.sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
-        break;
-      case "za":
-        sorted.sort((a, b) => b.nombre.localeCompare(a.nombre, "es"));
-        break;
-      case "calificados":
-        sorted.sort((a, b) => qualificationScore(b) - qualificationScore(a));
-        break;
-    }
-    // Pinned leads always first
-    return sorted.sort((a, b) => Number(b.pinned) - Number(a.pinned));
-  }, [filteredLeads, sortBy]);
-
-  const useDateGrouping = sortBy === "recientes" || sortBy === "antiguos";
-  const grouped = useMemo(() => useDateGrouping ? groupByDate(sortedLeads) : [], [sortedLeads, useDateGrouping]);
 
   const toggleSelect = (id: string) => {
     setSelected((prev) => {
@@ -426,62 +500,233 @@ export default function LeadsPage() {
 
   return (
     <div className="space-y-4">
-      {/* Header */}
-      <div className="flex items-center justify-between animate-blur-fade">
-        <h1 className="text-2xl font-bold flex items-center gap-2">
+      {/* Header Principal */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-blur-fade">
+        <h1 className="text-2xl font-bold flex items-center gap-2 shrink-0">
           <HiOutlineUsers className="h-6 w-6 text-primary" />
           Leads
         </h1>
-        <div className="flex items-center gap-2">
+        
+        <div className="flex flex-wrap items-center gap-2">
           {!selectMode ? (
             <>
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => setSelectMode(true)}
-                className="cursor-pointer"
+                className="cursor-pointer h-9 px-3 hidden sm:flex"
               >
                 <HiOutlineCheckCircle className="mr-1 h-4 w-4" />
                 Seleccionar
               </Button>
-              <CSVUpload />
-              <Button className="cursor-pointer" onClick={() => useUIStore.getState().setQuickAddOpen(true)}>
-                <HiOutlinePlusCircle className="mr-2 h-4 w-4" />
-                Nuevo Lead
+              <div className="hidden sm:block">
+                <CSVUpload />
+              </div>
+              <Button 
+                className="cursor-pointer h-9 px-3 md:px-4 shrink-0 transition-all" 
+                onClick={() => useUIStore.getState().setQuickAddOpen(true)}
+              >
+                <HiOutlinePlusCircle className="mr-1 sm:mr-2 h-4 w-4" />
+                <span>Nuevo Lead</span>
               </Button>
+
+              {/* Menú para Seleccionar / CSV en móvil */}
+              <div className="flex sm:hidden">
+                <Popover>
+                  <PopoverTrigger
+                    render={
+                      <Button variant="outline" size="icon" className="h-9 w-9 shrink-0 cursor-pointer" />
+                    }
+                  >
+                    <HiOutlineArrowPath className="h-4 w-4" /> 
+                    {/* Un icono de menú o más acciones */}
+                  </PopoverTrigger>
+                  <PopoverContent align="end" className="w-48 p-2 flex flex-col gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setSelectMode(true)}
+                      className="cursor-pointer w-full justify-start"
+                    >
+                      <HiOutlineCheckCircle className="mr-2 h-4 w-4" />
+                      Seleccionar Múltiples
+                    </Button>
+                    <CSVUpload />
+                  </PopoverContent>
+                </Popover>
+              </div>
             </>
           ) : (
             <Button
               variant="outline"
               size="sm"
               onClick={exitSelectMode}
-              className="cursor-pointer"
+              className="cursor-pointer h-9"
             >
               <HiOutlineXMark className="mr-1 h-4 w-4" />
-              Cancelar
+              Cancelar Selección
             </Button>
           )}
         </div>
       </div>
 
-      {/* Buscador */}
-      <div className="relative">
-        <HiOutlineMagnifyingGlass className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          placeholder="Buscar por nombre, celular, email o Instagram…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="pl-9 h-10 rounded-xl bg-muted/50 border-0 focus-visible:ring-2 focus-visible:ring-primary/30"
-        />
-        {search && (
-          <button
-            type="button"
-            onClick={() => setSearch("")}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer"
+      {/* Buscador y Filtros */}
+      <div className="flex items-center gap-2 w-full animate-blur-fade">
+        <div className="relative flex-1 min-w-0">
+          <HiOutlineMagnifyingGlass className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Buscar por nombre, celular, email o ig..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9 h-10 w-full rounded-xl bg-background border border-input focus-visible:ring-2 focus-visible:ring-primary/30 transition-shadow"
+          />
+          {search && (
+            <button
+              type="button"
+              onClick={() => setSearch("")}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
+            >
+              <HiOutlineXMark className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+
+        <Sheet>
+          <SheetTrigger
+            render={
+              <Button
+                variant="outline"
+                className="h-10 px-3 sm:px-4 shrink-0 cursor-pointer rounded-xl bg-background"
+              />
+            }
           >
-            <HiOutlineXMark className="h-4 w-4" />
-          </button>
-        )}
+            <ListFilter className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Filtros</span>
+          </SheetTrigger>
+          <SheetContent side="bottom" className="sm:max-w-md mx-auto rounded-t-2xl max-h-[90vh] overflow-y-auto px-6 py-6 ring-1 ring-border">
+            <SheetHeader className="mb-6 text-left">
+              <SheetTitle className="text-xl">Filtros y Orden</SheetTitle>
+              <SheetDescription>
+                Ajusta qué leads deseas visualizar en tu lista.
+              </SheetDescription>
+            </SheetHeader>
+            <div className="flex flex-col gap-8">
+              {/* Filtro por estado */}
+              <div className="space-y-4">
+                <label className="text-sm font-semibold text-foreground/90 uppercase tracking-wider flex items-center gap-2">
+                  <Star className="h-4 w-4 text-muted-foreground" />
+                  Estado del Lead
+                </label>
+                <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+                  {estados.map((e) => (
+                    <Button
+                      key={e.value}
+                      variant={filtroEstado === e.value ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setFiltroEstado(e.value as LeadEstado | "todos")}
+                      className={`cursor-pointer h-9 px-4 rounded-xl flex-1 sm:flex-none justify-center transition-colors ${filtroEstado === e.value ? "shadow-sm" : "hover:bg-muted"}`}
+                    >
+                      {e.label}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Filtro por fecha y notas */}
+              <div className="space-y-4">
+                <label className="text-sm font-semibold text-foreground/90 uppercase tracking-wider flex items-center gap-2">
+                  <HiOutlineCalendarDays className="h-4 w-4 text-muted-foreground" />
+                  Fecha de Creación
+                </label>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {[
+                    { key: "todos", label: "Todas las fechas" },
+                    { key: "hoy", label: "Hoy" },
+                    { key: "ayer", label: "Ayer" },
+                    { key: "semana", label: "Últimos 7 días" },
+                  ].map((opt) => (
+                    <Button
+                      key={opt.key}
+                      variant={dateFilter === opt.key ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => {
+                        setDateFilter(opt.key);
+                        setCustomDate(null);
+                      }}
+                      className={`cursor-pointer h-9 px-4 rounded-xl transition-colors ${dateFilter === opt.key ? "shadow-sm" : "hover:bg-muted"}`}
+                    >
+                      {opt.label}
+                    </Button>
+                  ))}
+
+                  <Popover open={filterDateOpen} onOpenChange={setFilterDateOpen}>
+                    <PopoverTrigger
+                      render={
+                        <Button
+                          variant={dateFilter !== "todos" && dateFilter !== "hoy" && dateFilter !== "ayer" && dateFilter !== "semana" ? "default" : "outline"}
+                          size="sm"
+                          className="cursor-pointer h-9 px-4 rounded-xl gap-2 transition-colors"
+                        />
+                      }
+                    >
+                      <HiOutlineCalendarDays className="h-4 w-4" />
+                      {customDate
+                        ? customDate.toLocaleDateString("es-AR", { day: "numeric", month: "short" })
+                        : "Elegir día"}
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={customDate ?? undefined}
+                        onSelect={(day) => {
+                          if (day) {
+                            setCustomDate(day);
+                            const key = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, "0")}-${String(day.getDate()).padStart(2, "0")}`;
+                            setDateFilter(key);
+                          }
+                          setFilterDateOpen(false);
+                        }}
+                        defaultMonth={customDate ?? new Date()}
+                      />
+                    </PopoverContent>
+                  </Popover>
+
+                  <Button
+                    variant={soloConNotas ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setSoloConNotas((v) => !v)}
+                    className={`cursor-pointer h-9 px-4 rounded-xl gap-2 transition-colors ${soloConNotas ? "shadow-sm bg-indigo-500 text-white hover:bg-indigo-600 border-indigo-500" : "hover:bg-muted"}`}
+                  >
+                    <HiOutlineChatBubbleLeftRight className="h-4 w-4" />
+                    Con notas
+                  </Button>
+                </div>
+              </div>
+
+              {/* Ordenamiento */}
+              <div className="space-y-4">
+                <label className="text-sm font-semibold text-foreground/90 uppercase tracking-wider flex items-center gap-2">
+                  <HiOutlineBarsArrowDown className="h-4 w-4 text-muted-foreground" />
+                  Ordenado
+                </label>
+                <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+                  {sortOptions.map((opt) => (
+                    <Button
+                      key={opt.value}
+                      variant={sortBy === opt.value ? "secondary" : "ghost"}
+                      size="sm"
+                      onClick={() => setSortBy(opt.value)}
+                      className={`cursor-pointer h-9 px-4 rounded-xl justify-start sm:justify-center gap-2 transition-colors ${sortBy === opt.value ? "ring-1 ring-border shadow-sm" : ""}`}
+                    >
+                      {opt.icon}
+                      {opt.label}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </SheetContent>
+        </Sheet>
       </div>
 
       {/* Barra de acciones en masa */}
@@ -594,12 +839,12 @@ export default function LeadsPage() {
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <Select onValueChange={handleBulkEstado}>
-                <SelectTrigger className="w-40 h-8 cursor-pointer">
+                <SelectTrigger className="w-full sm:w-40 h-9 cursor-pointer shadow-sm">
                   <div className="flex items-center gap-1">
-                    <HiOutlineArrowPath className="h-3 w-3" />
-                    <span className="text-xs">Cambiar estado</span>
+                    <HiOutlineArrowPath className="h-4 w-4" />
+                    <span>Cambiar estado</span>
                   </div>
                 </SelectTrigger>
                 <SelectContent>
@@ -613,10 +858,10 @@ export default function LeadsPage() {
 
               {closers && closers.length > 0 && (
                 <Select onValueChange={handleBulkCloser}>
-                  <SelectTrigger className="w-44 h-8 cursor-pointer">
+                  <SelectTrigger className="w-full sm:w-44 h-9 cursor-pointer shadow-sm">
                     <div className="flex items-center gap-1">
-                      <HiOutlineUserCircle className="h-3 w-3" />
-                      <span className="text-xs">Asignar closer</span>
+                      <HiOutlineUserCircle className="h-4 w-4" />
+                      <span>Asignar closer</span>
                     </div>
                   </SelectTrigger>
                   <SelectContent>
@@ -636,12 +881,12 @@ export default function LeadsPage() {
                       variant="outline"
                       size="sm"
                       disabled={isPending}
-                      className="cursor-pointer h-8"
+                      className="cursor-pointer h-9 shadow-sm"
                     />
                   }
                 >
-                  <HiOutlineCalendarDays className="mr-1 h-3 w-3" />
-                  <span className="text-xs">Cambiar fecha</span>
+                  <HiOutlineCalendarDays className="mr-1 h-4 w-4" />
+                  <span>Cambiar fecha</span>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0">
                   <Calendar
@@ -669,201 +914,119 @@ export default function LeadsPage() {
         </Card>
       )}
 
-      {/* Filtros por estado + fecha */}
-      <div className="flex flex-col gap-3">
-        <Tabs
-          value={filtroEstado}
-          onValueChange={(v) => setFiltroEstado(v as LeadEstado | "todos")}
-        >
-          <TabsList>
-            {estados.map((e) => (
-              <TabsTrigger key={e.value} value={e.value} className="cursor-pointer">
-                {e.label}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
-
-        <div className="flex items-center gap-1.5 flex-wrap">
-          {[
-            { key: "todos", label: "Todas las fechas" },
-            { key: "hoy", label: "Hoy" },
-            { key: "ayer", label: "Ayer" },
-            { key: "semana", label: "Últimos 7 días" },
-          ].map((opt) => (
-            <Button
-              key={opt.key}
-              variant={dateFilter === opt.key ? "default" : "outline"}
-              size="sm"
-              onClick={() => {
-                setDateFilter(opt.key);
-                setCustomDate(null);
-              }}
-              className="cursor-pointer h-7 text-xs rounded-full px-3"
-            >
-              {opt.label}
-            </Button>
-          ))}
-
-          <Button
-            variant={soloConNotas ? "default" : "outline"}
-            size="sm"
-            onClick={() => setSoloConNotas((v) => !v)}
-            className="cursor-pointer h-7 text-xs rounded-full px-3 gap-1.5"
-          >
-            <HiOutlineChatBubbleLeftRight className="h-3.5 w-3.5" />
-            Con notas
-          </Button>
-
-          <Popover open={filterDateOpen} onOpenChange={setFilterDateOpen}>
-            <PopoverTrigger
-              render={
-                <Button
-                  variant={dateFilter !== "todos" && dateFilter !== "hoy" && dateFilter !== "ayer" && dateFilter !== "semana" ? "default" : "outline"}
-                  size="sm"
-                  className="cursor-pointer h-7 text-xs rounded-full px-3 gap-1.5"
-                />
-              }
-            >
-              <HiOutlineCalendarDays className="h-3.5 w-3.5" />
-              {customDate
-                ? customDate.toLocaleDateString("es-AR", { day: "numeric", month: "short" })
-                : "Elegir día"}
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-0" align="start">
-              <Calendar
-                mode="single"
-                selected={customDate ?? undefined}
-                onSelect={(day) => {
-                  if (day) {
-                    setCustomDate(day);
-                    const key = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, "0")}-${String(day.getDate()).padStart(2, "0")}`;
-                    setDateFilter(key);
-                  }
-                  setFilterDateOpen(false);
-                }}
-                defaultMonth={customDate ?? new Date()}
-              />
-            </PopoverContent>
-          </Popover>
-        </div>
-
-        {/* Ordenamiento */}
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <span className="text-xs text-muted-foreground flex items-center gap-1 mr-1">
-            <ListFilter className="h-3.5 w-3.5" />
-            Ordenar:
-          </span>
-          {sortOptions.map((opt) => (
-            <Button
-              key={opt.value}
-              variant={sortBy === opt.value ? "default" : "outline"}
-              size="sm"
-              onClick={() => setSortBy(opt.value)}
-              className="cursor-pointer h-7 text-xs rounded-full px-3 gap-1.5"
-            >
-              {opt.icon}
-              {opt.label}
-            </Button>
-          ))}
-        </div>
-      </div>
-
-      {/* Lista de leads */}
+      {/* Lista de leads — virtualizada */}
       {isLoading ? (
-        <div className="space-y-2">
-          {[1, 2, 3, 4, 5].map((i) => (
-            <div key={i} className="h-16 rounded-lg bg-muted animate-pulse" />
-          ))}
+        <div className="flex flex-col items-center justify-center py-20 gap-3 text-muted-foreground">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-muted border-t-primary" />
+          <span className="text-sm">Cargando leads...</span>
         </div>
-      ) : useDateGrouping && grouped.length > 0 ? (
-        <div className="space-y-6">
-          {grouped.map(({ date, label, leads: dateLeads }) => (
-            <div key={date}>
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <h3 className="text-sm font-semibold text-muted-foreground capitalize">
-                    {label}
-                  </h3>
-                  <Badge variant="outline" className="text-xs">
-                    {dateLeads.length}
-                  </Badge>
-                </div>
-                {selectMode && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => selectAllInDate(dateLeads)}
-                    className="text-xs h-7 cursor-pointer"
-                  >
-                    {dateLeads.every((l) => selected.has(l.id))
-                      ? "Deseleccionar todos"
-                      : "Seleccionar todos"}
-                  </Button>
-                )}
-              </div>
-              <div className="space-y-1.5">
-                {dateLeads.map((lead) => (
-                  <LeadCard
-                    key={lead.id}
-                    lead={lead}
-                    selectable={selectMode}
-                    selected={selected.has(lead.id)}
-                    onToggle={toggleSelect}
-                    onTogglePin={handleTogglePin}
-                    lastNote={interactionsMap?.get(lead.id)}
-                  />
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : !useDateGrouping && sortedLeads.length > 0 ? (
-        <div>
-          <div className="flex items-center justify-between mb-2">
-            <Badge variant="outline" className="text-xs">
-              {sortedLeads.length} leads
-            </Badge>
-            {selectMode && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setSelected((prev) => {
-                    const allSelected = sortedLeads.every((l) => prev.has(l.id));
-                    if (allSelected) return new Set();
-                    return new Set(sortedLeads.map((l) => l.id));
-                  });
-                }}
-                className="text-xs h-7 cursor-pointer"
-              >
-                {sortedLeads.every((l) => selected.has(l.id))
-                  ? "Deseleccionar todos"
-                  : "Seleccionar todos"}
-              </Button>
-            )}
-          </div>
-          <div className="space-y-1.5">
-            {sortedLeads.map((lead) => (
-              <LeadCard
-                key={lead.id}
-                lead={lead}
-                selectable={selectMode}
-                selected={selected.has(lead.id)}
-                onToggle={toggleSelect}
-                onTogglePin={handleTogglePin}
-                lastNote={interactionsMap?.get(lead.id)}
-              />
-            ))}
-          </div>
-        </div>
-      ) : (
+      ) : flatItems.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center text-muted-foreground">
             No hay leads
             {filtroEstado !== "todos" ? ` con estado "${filtroEstado}"` : ""}
           </CardContent>
         </Card>
+      ) : (
+        <div ref={listContainerRef}>
+          {/* Flat list header (non-grouped) */}
+          {!useDateGrouping && (
+            <div className="flex items-center justify-between mb-2">
+              <Badge variant="outline" className="text-xs">
+                {allLeads.length} leads{hasNextPage ? "+" : ""}
+              </Badge>
+              {selectMode && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setSelected((prev) => {
+                      const allSelected = allLeads.every((l) => prev.has(l.id));
+                      if (allSelected) return new Set<string>();
+                      return new Set(allLeads.map((l) => l.id));
+                    });
+                  }}
+                  className="text-xs h-7 cursor-pointer"
+                >
+                  {allLeads.every((l) => selected.has(l.id))
+                    ? "Deseleccionar todos"
+                    : "Seleccionar todos"}
+                </Button>
+              )}
+            </div>
+          )}
+          <div
+            style={{
+              height: `${virtualizer.getTotalSize()}px`,
+              width: "100%",
+              position: "relative",
+            }}
+          >
+            {virtualizer.getVirtualItems().map((vItem) => {
+              const item = flatItems[vItem.index];
+              return (
+                <div
+                  key={vItem.key}
+                  data-index={vItem.index}
+                  ref={virtualizer.measureElement}
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    width: "100%",
+                    transform: `translateY(${vItem.start - scrollMargin}px)`,
+                  }}
+                >
+                  {item.type === "date-header" ? (
+                    <div className="flex items-center justify-between mb-2 pt-4 first:pt-0">
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-sm font-semibold text-muted-foreground capitalize">
+                          {item.label}
+                        </h3>
+                        <Badge variant="outline" className="text-xs">
+                          {item.dateLeads.length}
+                        </Badge>
+                      </div>
+                      {selectMode && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => selectAllInDate(item.dateLeads)}
+                          className="text-xs h-7 cursor-pointer"
+                        >
+                          {item.dateLeads.every((l) => selected.has(l.id))
+                            ? "Deseleccionar todos"
+                            : "Seleccionar todos"}
+                        </Button>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="pb-1.5">
+                      <LeadCard
+                        lead={item.lead}
+                        selectable={selectMode}
+                        selected={selected.has(item.lead.id)}
+                        onToggle={toggleSelect}
+                        onTogglePin={handleTogglePin}
+                        lastNote={interactionsMap?.get(item.lead.id)}
+                      />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Infinite scroll trigger */}
+          <div ref={bottomRef} className="h-4" />
+
+          {/* Spinner for next page */}
+          {isFetchingNextPage && (
+            <div className="flex items-center justify-center py-6">
+              <div className="h-6 w-6 animate-spin rounded-full border-4 border-muted border-t-primary" />
+            </div>
+          )}
+        </div>
       )}
     </div>
   );

@@ -45,7 +45,7 @@ export function useCreateFollowup() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (fup: { lead_id: string; user_id: string; fecha_programada: string }) => {
+    mutationFn: async (fup: { lead_id: string; user_id: string; fecha_programada: string; hora_programada?: string }) => {
       const { data, error } = await getSupabase()
         .from("followups")
         .insert(fup)

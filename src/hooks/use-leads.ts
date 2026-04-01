@@ -1,6 +1,96 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
+import { localDateStr, localDayBoundsISO } from "@/lib/utils";
 import type { Lead, LeadEstado } from "@/types/database";
+
+// --- Infinite leads (server-side filtering + pagination) ---
+
+export const LEADS_PAGE_SIZE = 50;
+
+export type SortOption = "recientes" | "antiguos" | "az" | "za" | "calificados";
+
+export type InfiniteLeadsFilters = {
+  filtroEstado?: LeadEstado | "todos";
+  search?: string;
+  dateFilter?: string;
+  sortBy?: SortOption;
+};
+
+export function useInfiniteLeads(filters: InfiniteLeadsFilters) {
+  return useInfiniteQuery({
+    queryKey: ["leads-infinite", filters],
+    queryFn: async ({ pageParam }) => {
+      const from = (pageParam as number) * LEADS_PAGE_SIZE;
+      const to = from + LEADS_PAGE_SIZE - 1;
+
+      let query = getSupabase()
+        .from("leads")
+        .select("*, closer:users!leads_closer_id_fkey(*), setter:users!leads_setter_id_fkey(*)")
+        .range(from, to);
+
+      // Estado filter
+      if (filters.filtroEstado && filters.filtroEstado !== "todos") {
+        query = query.eq("estado", filters.filtroEstado);
+      }
+
+      // Search (server-side ilike)
+      if (filters.search?.trim()) {
+        const q = `%${filters.search.trim()}%`;
+        query = query.or(
+          `nombre.ilike.${q},celular.ilike.${q},email.ilike.${q},instagram.ilike.${q}`
+        );
+      }
+
+      // Date filter — bounds use localDayBoundsISO so Supabase timestamptz
+      // comparisons respect the user's local timezone (not UTC midnight).
+      const now = new Date();
+      if (filters.dateFilter && filters.dateFilter !== "todos") {
+        if (filters.dateFilter === "hoy") {
+          const { start, end } = localDayBoundsISO(localDateStr(now));
+          query = query.gte("created_at", start).lte("created_at", end);
+        } else if (filters.dateFilter === "ayer") {
+          const yesterday = new Date(now);
+          yesterday.setDate(yesterday.getDate() - 1);
+          const { start, end } = localDayBoundsISO(localDateStr(yesterday));
+          query = query.gte("created_at", start).lte("created_at", end);
+        } else if (filters.dateFilter === "semana") {
+          const weekAgo = new Date(now);
+          weekAgo.setDate(weekAgo.getDate() - 7);
+          const { start } = localDayBoundsISO(localDateStr(weekAgo));
+          query = query.gte("created_at", start);
+        } else {
+          // custom YYYY-MM-DD
+          const { start, end } = localDayBoundsISO(filters.dateFilter);
+          query = query.gte("created_at", start).lte("created_at", end);
+        }
+      }
+
+      // Sort — calificados is client-side, rest are server-side
+      const sortBy = filters.sortBy ?? "recientes";
+      if (sortBy === "az") {
+        query = query.order("nombre", { ascending: true });
+      } else if (sortBy === "za") {
+        query = query.order("nombre", { ascending: false });
+      } else if (sortBy === "antiguos") {
+        query = query
+          .order("pinned", { ascending: true })
+          .order("created_at", { ascending: true });
+      } else {
+        // recientes + calificados both fetch newest first
+        query = query
+          .order("pinned", { ascending: false })
+          .order("created_at", { ascending: false });
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+      return (data ?? []) as Lead[];
+    },
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, _allPages, lastPageParam) =>
+      lastPage.length === LEADS_PAGE_SIZE ? (lastPageParam as number) + 1 : undefined,
+  });
+}
 
 let _supabase: ReturnType<typeof createClient>;
 function getSupabase() {
@@ -101,6 +191,7 @@ export function useCreateLead() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["leads"] });
+      queryClient.invalidateQueries({ queryKey: ["leads-infinite"] });
       queryClient.invalidateQueries({ queryKey: ["stats"] });
     },
   });
@@ -160,6 +251,7 @@ export function useBulkCreateLeads() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["leads"] });
+      queryClient.invalidateQueries({ queryKey: ["leads-infinite"] });
       queryClient.invalidateQueries({ queryKey: ["stats"] });
     },
   });
@@ -184,6 +276,7 @@ export function useUpdateLead() {
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["leads"] });
+      queryClient.invalidateQueries({ queryKey: ["leads-infinite"] });
       queryClient.invalidateQueries({ queryKey: ["lead", variables.id] });
       queryClient.invalidateQueries({ queryKey: ["stats"] });
       queryClient.invalidateQueries({ queryKey: ["followups"] });
@@ -212,6 +305,7 @@ export function useBulkUpdateLeads() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["leads"] });
+      queryClient.invalidateQueries({ queryKey: ["leads-infinite"] });
       queryClient.invalidateQueries({ queryKey: ["stats"] });
       queryClient.invalidateQueries({ queryKey: ["followups"] });
     },
@@ -231,6 +325,7 @@ export function useBulkDeleteLeads() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["leads"] });
+      queryClient.invalidateQueries({ queryKey: ["leads-infinite"] });
       queryClient.invalidateQueries({ queryKey: ["stats"] });
       queryClient.invalidateQueries({ queryKey: ["followups"] });
     },
@@ -253,7 +348,43 @@ export function useTogglePin() {
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["leads"] });
+      queryClient.invalidateQueries({ queryKey: ["leads-infinite"] });
       queryClient.invalidateQueries({ queryKey: ["lead", variables.id] });
+    },
+  });
+}
+
+export function useUpdateLeadPayment() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      id,
+      pago_programa,
+      plan_pago,
+      monto_programa,
+      fecha_pago,
+    }: {
+      id: string;
+      pago_programa: boolean;
+      plan_pago: import("@/types/database").PlanPago | null;
+      monto_programa: number | null;
+      fecha_pago: string | null;
+    }) => {
+      const { data, error } = await getSupabase()
+        .from("leads")
+        .update({ pago_programa, plan_pago, monto_programa, fecha_pago })
+        .eq("id", id)
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["lead", variables.id] });
+      queryClient.invalidateQueries({ queryKey: ["stats"] });
+      queryClient.invalidateQueries({ queryKey: ["kpi-history"] });
+      queryClient.invalidateQueries({ queryKey: ["kpi-detail"] });
     },
   });
 }

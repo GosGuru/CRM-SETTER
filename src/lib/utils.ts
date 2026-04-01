@@ -12,3 +12,16 @@ export function localDateStr(date: Date = new Date()): string {
   const d = String(date.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
 }
+
+/**
+ * Returns ISO 8601 UTC bounds for a given local date string (YYYY-MM-DD).
+ * "T00:00:00" and "T23:59:59.999" are interpreted as LOCAL time, then
+ * converted to UTC so Supabase timestamptz comparisons are correct regardless
+ * of the user's timezone.
+ */
+export function localDayBoundsISO(dateStr: string): { start: string; end: string } {
+  return {
+    start: new Date(`${dateStr}T00:00:00`).toISOString(),
+    end: new Date(`${dateStr}T23:59:59.999`).toISOString(),
+  };
+}

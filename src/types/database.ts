@@ -2,6 +2,10 @@ export type UserRole = "setter" | "closer";
 
 export type LeadEstado = "nuevo" | "seguimiento" | "cerrado" | "pagó";
 
+export type PlanPago = "completo" | "2_partes" | "3_partes";
+
+export type KPIDetailType = "inbound" | "fups" | "cal_enviados" | "calls_agendadas" | "tasa" | "cash";
+
 export type InteractionTipo =
   | "nota"
   | "llamada"
@@ -37,6 +41,10 @@ export interface Lead {
   fecha_call: string | null;
   fecha_call_set_at: string | null;
   pinned: boolean;
+  pago_programa: boolean;
+  plan_pago: PlanPago | null;
+  monto_programa: number | null;
+  fecha_pago: string | null;
   created_at: string;
   updated_at: string;
   // Joins opcionales
@@ -60,6 +68,7 @@ export interface Followup {
   lead_id: string;
   user_id: string;
   fecha_programada: string;
+  hora_programada: string | null;
   completado: boolean;
   completado_at: string | null;
   created_at: string;
@@ -75,5 +84,17 @@ export interface DailyKPI {
   calendarios_enviados: number;
   calls_agendadas: number;
   tasa_agenda: number;
-  cash_collected: number;
+  cash_collected: number; // setter commission = (calls × cashPerAgenda + programAmount) × commissionRate
+}
+
+export interface Setting {
+  key: string;
+  value: string;
+  updated_at: string;
+}
+
+export interface AppSettings {
+  cash_per_agenda: number;
+  commission_rate: number;
+  program_price: number;
 }
