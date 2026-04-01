@@ -25,14 +25,12 @@ const SEARCH_FIELDS = [
   "instagram",
 ] as const;
 
-const TOKEN_SEPARATOR_REGEX = /[\s._-]+/g;
 const DIACRITICS_REGEX = /[\u0300-\u036f]/g;
 
+// Solo normaliza espacios — NO reemplaza _ . - porque son parte de handles de Instagram
 function normalizeSearchInput(value: string): string {
   return value
     .normalize("NFKC")
-    .replace(/[(),"']/g, " ")
-    .replace(TOKEN_SEPARATOR_REGEX, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -41,6 +39,7 @@ function normalizeStoredName(value: string): string {
   return value.replace(/\s+/g, " ").trim();
 }
 
+// Solo divide por espacios — los guiones bajos NO son separadores
 function tokenizeSearch(value: string): string[] {
   return normalizeSearchInput(value)
     .split(" ")
@@ -50,23 +49,6 @@ function tokenizeSearch(value: string): string[] {
 
 function escapeLikePattern(value: string): string {
   return value.replace(/[\\%_]/g, "\\$&");
-}
-
-function buildWordOrFilter(word: string): string {
-  const q = `%${escapeLikePattern(word)}%`;
-  return `or(${SEARCH_FIELDS.map((field) => `${field}.ilike.${q}`).join(",")})`;
-}
-
-function buildSearchFilter(search: string): string | null {
-  const words = tokenizeSearch(search).slice(0, 5);
-  if (words.length === 0) return null;
-
-  if (words.length === 1) {
-    const q = `%${escapeLikePattern(words[0])}%`;
-    return SEARCH_FIELDS.map((field) => `${field}.ilike.${q}`).join(",");
-  }
-
-  return `and(${words.map((word) => buildWordOrFilter(word)).join(",")})`;
 }
 
 function canonicalName(value: string): string {
@@ -93,11 +75,13 @@ export function useInfiniteLeads(filters: InfiniteLeadsFilters) {
         query = query.eq("estado", filters.filtroEstado);
       }
 
-      // Search (server-side ilike) — normalize separators and search by tokens
+      // Search: un .or() por token — PostgREST AND-ea varios or= en la URL.
+      // Dividimos SOLO por espacio; el _ no es separador (handles de Instagram).
       if (filters.search?.trim()) {
-        const filter = buildSearchFilter(filters.search);
-        if (filter) {
-          query = query.or(filter);
+        const words = tokenizeSearch(filters.search);
+        for (const word of words) {
+          const q = `%${escapeLikePattern(word)}%`;
+          query = query.or(SEARCH_FIELDS.map((f) => `${f}.ilike.${q}`).join(","));
         }
       }
 
