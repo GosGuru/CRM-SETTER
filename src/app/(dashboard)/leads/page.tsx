@@ -7,6 +7,8 @@ import { createClient } from "@/lib/supabase/client";
 import { localDateStr } from "@/lib/utils";
 import {
   useInfiniteLeads,
+  useLeadsSearchIndex,
+  searchLeads,
   useBulkUpdateLeads,
   useBulkDeleteLeads,
   useTogglePin,
@@ -155,7 +157,7 @@ export default function LeadsPage() {
   const bulkInteractions = useBulkCreateInteractions();
   const bulkFollowups = useBulkCreateFollowups();
 
-  // ── Search debounce (300 ms) ───────────────────────────────────
+  // ── Search debounce (180 ms) ───────────────────────────────────
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   useEffect(() => {
@@ -170,15 +172,10 @@ export default function LeadsPage() {
   const [soloConNotas, setSoloConNotas] = useState(false);
   const [sortBy, setSortBy] = useState<SortOption>("recientes");
 
-  // Auto-clear restrictive filters when searching so matches are not hidden.
-  useEffect(() => {
-    if (!debouncedSearch.trim()) return;
+  const isSearching = debouncedSearch.trim().length > 0;
 
-    if (dateFilter !== "todos") setDateFilter("todos");
-    if (customDate) setCustomDate(null);
-    if (filtroEstado !== "todos") setFiltroEstado("todos");
-    if (soloConNotas) setSoloConNotas(false);
-  }, [debouncedSearch, dateFilter, customDate, filtroEstado, soloConNotas, setFiltroEstado]);
+  // ── Search index (client-side — no PostgREST ilike/or issues) ─
+  const { data: searchIndexData, isFetching: searchIndexFetching } = useLeadsSearchIndex();
 
   // ── Infinite leads query (server-side filters + pagination) ───
   const {
@@ -189,14 +186,13 @@ export default function LeadsPage() {
     hasNextPage,
     fetchNextPage,
   } = useInfiniteLeads({
-    filtroEstado,
-    search: debouncedSearch,
-    dateFilter,
+    filtroEstado: isSearching ? "todos" : filtroEstado,
+    dateFilter: isSearching ? "todos" : dateFilter,
     sortBy,
   });
 
   // Flatten pages
-  const allLeads = useMemo(() => {
+  const pagedLeads = useMemo(() => {
     const flat = data?.pages.flat() ?? [];
     if (sortBy === "calificados") {
       return [...flat].sort((a, b) => qualificationScore(b) - qualificationScore(a));
@@ -204,9 +200,18 @@ export default function LeadsPage() {
     return flat;
   }, [data, sortBy]);
 
+  // When searching: use client-side filtered index. Otherwise: paginated.
+  const allLeads = useMemo(() => {
+    if (isSearching) {
+      const base = searchIndexData ?? [];
+      return searchLeads(base, debouncedSearch);
+    }
+    return pagedLeads;
+  }, [isSearching, searchIndexData, debouncedSearch, pagedLeads]);
+
   // ── Interactions map — only for loaded lead IDs ───────────────
   const loadedIds = useMemo(() => allLeads.map((l) => l.id), [allLeads]);
-  const shouldFetchInteractions = loadedIds.length > 0 && debouncedSearch.trim().length === 0;
+  const shouldFetchInteractions = loadedIds.length > 0 && !isSearching;
 
   const { data: interactionsMap } = useQuery({
     queryKey: ["leads-last-interactions", shouldFetchInteractions ? loadedIds : []],
@@ -597,7 +602,7 @@ export default function LeadsPage() {
             onChange={(e) => setSearch(e.target.value)}
             className="pl-9 h-10 w-full rounded-xl bg-background border border-input focus-visible:ring-2 focus-visible:ring-primary/30 transition-shadow"
           />
-          {isFetching && (
+          {(isFetching || (isSearching && searchIndexFetching)) && (
             <div
               className={`absolute top-1/2 -translate-y-1/2 h-4 w-4 animate-spin rounded-full border-2 border-muted border-t-primary ${search ? "right-10" : "right-3"}`}
               aria-hidden
@@ -951,14 +956,10 @@ export default function LeadsPage() {
       ) : flatItems.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center text-muted-foreground">
-            {debouncedSearch.trim()
-              ? `No encontramos resultados para "${debouncedSearch}".`
-              : "No hay leads"}
-            {debouncedSearch.trim()
-              ? " Probá con menos palabras o quitá filtros."
-              : filtroEstado !== "todos"
-                ? ` con estado "${filtroEstado}"`
-                : ""}
+            {isSearching
+              ? `No encontramos "${debouncedSearch}" en ningún lead. Probá con otra parte del nombre, celular o @ig.`
+              : "No hay leads"
+                + (filtroEstado !== "todos" ? ` con estado "${filtroEstado}"` : "")}
           </CardContent>
         </Card>
       ) : (

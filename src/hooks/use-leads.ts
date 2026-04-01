@@ -75,15 +75,7 @@ export function useInfiniteLeads(filters: InfiniteLeadsFilters) {
         query = query.eq("estado", filters.filtroEstado);
       }
 
-      // Search: un .or() por token — PostgREST AND-ea varios or= en la URL.
-      // Dividimos SOLO por espacio; el _ no es separador (handles de Instagram).
-      if (filters.search?.trim()) {
-        const words = tokenizeSearch(filters.search);
-        for (const word of words) {
-          const q = `%${escapeLikePattern(word)}%`;
-          query = query.or(SEARCH_FIELDS.map((f) => `${f}.ilike.${q}`).join(","));
-        }
-      }
+      // NOTE: search is handled client-side via useLeadsSearchIndex — not here.
 
       // Date filter — bounds use localDayBoundsISO so Supabase timestamptz
       // comparisons respect the user's local timezone (not UTC midnight).
@@ -134,11 +126,49 @@ export function useInfiniteLeads(filters: InfiniteLeadsFilters) {
     getNextPageParam: (lastPage, _allPages, lastPageParam) =>
       lastPage.length === LEADS_PAGE_SIZE ? (lastPageParam as number) + 1 : undefined,
     placeholderData: (previousData) => previousData,
-    staleTime: 60_000,
+    staleTime: 30_000,
     refetchOnWindowFocus: false,
-    refetchOnMount: false,
+    refetchOnMount: true,
     retry: 1,
   });
+}
+
+// --- Client-side search index ---
+// Loads all leads (no search filter on server) and exposes a filter function.
+// This avoids all PostgREST ilike/.or() encoding issues permanently.
+export const SEARCH_INDEX_SIZE = 1500;
+
+export function useLeadsSearchIndex() {
+  return useQuery({
+    queryKey: ["leads-search-index"],
+    queryFn: async () => {
+      const { data, error } = await getSupabase()
+        .from("leads")
+        .select(
+          "id, nombre, nombre_real, apellido, celular, email, instagram, estado, closer_id, setter_id, fecha_call, fecha_call_set_at, pinned, created_at, updated_at, pago_programa, plan_pago, monto_programa, fecha_pago, respuestas, objetivo, edad, trabajo, decisor, inversion_ok, compromiso, closer:users!leads_closer_id_fkey(id,full_name), setter:users!leads_setter_id_fkey(id,full_name)"
+        )
+        .order("created_at", { ascending: false })
+        .limit(SEARCH_INDEX_SIZE);
+      if (error) throw error;
+      return (data ?? []) as unknown as Lead[];
+    },
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+  });
+}
+
+export function searchLeads(leads: Lead[], term: string): Lead[] {
+  const q = term.trim().toLowerCase();
+  if (!q) return leads;
+  return leads.filter(
+    (l) =>
+      l.nombre?.toLowerCase().includes(q) ||
+      l.nombre_real?.toLowerCase().includes(q) ||
+      l.apellido?.toLowerCase().includes(q) ||
+      l.celular?.toLowerCase().includes(q) ||
+      l.email?.toLowerCase().includes(q) ||
+      l.instagram?.toLowerCase().replace("@", "").includes(q.replace("@", ""))
+  );
 }
 
 let _supabase: ReturnType<typeof createClient>;
