@@ -82,7 +82,10 @@ export const LeadCard = memo(function LeadCardInner({ lead, selectable, selected
       className={cn(
         "transition-all duration-200 cursor-pointer hover:shadow-md group",
         selected && "ring-2 ring-primary bg-primary/5",
-        lead.pinned && "ring-1 ring-amber-300 bg-amber-50/40",
+        // Calificación máxima: ambos flags → ring dorado
+        lead.cliente_potencial && lead.califica_economicamente
+          ? "ring-2 ring-amber-400 bg-amber-50/30 dark:bg-amber-950/20"
+          : lead.pinned && "ring-1 ring-amber-300 bg-amber-50/40",
         lead.estado === "pagó" && "border-l-4 border-l-green-500",
         lead.estado === "seguimiento" && "border-l-4 border-l-amber-400",
         lead.estado === "cerrado" && "border-l-4 border-l-red-400",
@@ -106,9 +109,9 @@ export const LeadCard = memo(function LeadCardInner({ lead, selectable, selected
 
           <div className="flex-1 min-w-0 space-y-1">
 
-            {/* Fila 1: nombre + copy + estado + fecha call */}
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="font-semibold text-sm leading-tight truncate">
+            {/* Fila 1: nombre + copy | fecha call (solo si existe) */}
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="font-semibold text-sm leading-tight truncate min-w-0">
                 {primaryName}
               </span>
               <button
@@ -123,47 +126,59 @@ export const LeadCard = memo(function LeadCardInner({ lead, selectable, selected
                   : <HiOutlineClipboard className="h-3.5 w-3.5" />
                 }
               </button>
-              <StatusBadge estado={lead.estado} compact />
-              <span className="ml-auto shrink-0">
-                {fechaCall ? (
-                  <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded-full">
-                    <HiOutlineCalendarDays className="h-3 w-3" />
-                    {fechaCall} · {horaCall}
-                  </span>
-                ) : (
-                  <span className="text-[11px] font-medium text-orange-500/80 bg-orange-50 px-1.5 py-0.5 rounded-full">
-                    Sin agendar
-                  </span>
-                )}
-              </span>
+              {fechaCall && (
+                <span className="ml-auto shrink-0 inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded-full">
+                  <HiOutlineCalendarDays className="h-3 w-3" />
+                  {fechaCall} · {horaCall}
+                </span>
+              )}
+              {!fechaCall && lead.estado === "seguimiento" && (
+                <span className="ml-auto shrink-0 text-[10px] text-orange-400/80">
+                  Sin agendar
+                </span>
+              )}
             </div>
 
-            {/* Fila 2: handle/teléfono/trabajo/closer */}
-            <div className="flex items-center gap-2.5 text-[11px] text-muted-foreground flex-wrap">
+            {/* Fila 2: estado + flags + contacto */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <StatusBadge estado={lead.estado} compact />
+              {lead.cliente_potencial && (
+                <span className="inline-flex items-center gap-0.5 rounded-full bg-violet-100 text-violet-700 px-1.5 py-0.5 text-[10px] font-semibold leading-none">
+                  ⚡ Potencial
+                </span>
+              )}
+              {lead.califica_economicamente && (
+                <span className="inline-flex items-center gap-0.5 rounded-full bg-emerald-100 text-emerald-700 px-1.5 py-0.5 text-[10px] font-semibold leading-none">
+                  💰 Califica
+                </span>
+              )}
+              {(showHandle || lead.celular || lead.instagram) && (
+                <span className="text-muted-foreground/30 text-[10px]">·</span>
+              )}
               {showHandle && (
-                <span className="text-violet-500/80 truncate max-w-27.5">
+                <span className="text-[11px] text-violet-500/80 truncate max-w-27.5">
                   @{showHandle.replace("@", "")}
                 </span>
               )}
               {lead.celular && (
-                <span className="flex items-center gap-1 shrink-0">
+                <span className="flex items-center gap-1 text-[11px] text-muted-foreground shrink-0">
                   <HiOutlinePhone className="h-3 w-3" />
                   {lead.celular}
                 </span>
               )}
               {!showHandle && lead.instagram && (
-                <span className="text-violet-500/80 truncate max-w-27.5">
+                <span className="text-[11px] text-violet-500/80 truncate max-w-27.5">
                   @{lead.instagram.replace("@", "")}
                 </span>
               )}
               {lead.trabajo && (
-                <span className="hidden sm:flex items-center gap-1 truncate max-w-35">
+                <span className="hidden sm:flex items-center gap-1 text-[11px] text-muted-foreground truncate max-w-35">
                   <HiOutlineBriefcase className="h-3 w-3 shrink-0" />
                   {lead.trabajo}
                 </span>
               )}
               {lead.closer && (
-                <span className="hidden lg:inline truncate text-muted-foreground/60">
+                <span className="hidden lg:inline text-[11px] text-muted-foreground/60 truncate">
                   {lead.closer.full_name}
                 </span>
               )}

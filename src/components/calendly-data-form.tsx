@@ -23,6 +23,13 @@ import {
   HiOutlineClock,
   HiOutlineClipboardDocument,
   HiOutlineCheck,
+  HiOutlineEye,
+  HiOutlineEyeSlash,
+  HiOutlinePhone,
+  HiOutlineEnvelope,
+  HiOutlineUser,
+  HiOutlineBriefcase,
+  HiOutlineUserGroup,
 } from "react-icons/hi2";
 import type { Lead } from "@/types/database";
 
@@ -42,6 +49,7 @@ export function CalendlyDataForm({ lead }: { lead: Lead }) {
   const updateLead = useUpdateLead();
   const { data: closers } = useClosers();
   const [copied, setCopied] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
 
   const [form, setForm] = useState({
     nombre_real: lead.nombre_real ?? "",
@@ -77,7 +85,6 @@ export function CalendlyDataForm({ lead }: { lead: Lead }) {
       ...(form.nombre_real || form.apellido ? [`Nombre real: ${[form.nombre_real, form.apellido].filter(Boolean).join(" ") || "—"}`] : []),
       `Edad: ${form.edad || "—"}`,
       `Trabajo: ${form.trabajo || "—"}`,
-
       `Closer: ${closerName || "—"}`,
       `Respuestas: ${form.respuestas || "—"}`,
       `Contacto (Con el +): ${form.celular || "—"}`,
@@ -134,38 +141,37 @@ export function CalendlyDataForm({ lead }: { lead: Lead }) {
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="text-lg flex items-center gap-2">
-          <HiOutlineCalendarDays className="h-5 w-5" />
+      <CardHeader className="pb-4">
+        <CardTitle className="text-base flex items-center gap-2">
+          <HiOutlineCalendarDays className="h-4 w-4 text-primary" />
           Completar datos de agenda
         </CardTitle>
-        <CardDescription>
-          Cargá los datos del lead. Al guardar, pasa a &quot;seguimiento&quot;.
+        <CardDescription className="text-xs">
+          Al guardar, el lead pasa automáticamente a &quot;Seguimiento&quot;.
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-3">
+
           {/* Fecha + Hora */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>Fecha del call *</Label>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Fecha *</Label>
               <Popover open={calOpen} onOpenChange={setCalOpen}>
                 <PopoverTrigger
                   render={
                     <Button
                       variant="outline"
-                      className="w-full justify-start text-left font-normal cursor-pointer"
+                      className="w-full justify-start text-left font-normal cursor-pointer h-9 text-sm"
                     />
                   }
                 >
-                  <HiOutlineCalendarDays className="mr-2 h-4 w-4" />
-                  {form.fecha_call
-                    ? form.fecha_call.toLocaleDateString("es-AR", {
-                        weekday: "short",
-                        day: "numeric",
-                        month: "long",
-                      })
-                    : "Seleccionar fecha"}
+                  <HiOutlineCalendarDays className="mr-2 h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate">
+                    {form.fecha_call
+                      ? form.fecha_call.toLocaleDateString("es-AR", { day: "numeric", month: "short" })
+                      : "Elegir"}
+                  </span>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0" align="start">
                   <Calendar
@@ -182,17 +188,17 @@ export function CalendlyDataForm({ lead }: { lead: Lead }) {
                 </PopoverContent>
               </Popover>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="hora_call">Hora del call *</Label>
+            <div className="space-y-1.5">
+              <Label htmlFor="hora_call" className="text-xs font-medium">Hora *</Label>
               <div className="relative">
-                <HiOutlineClock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <HiOutlineClock className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
                 <Input
                   id="hora_call"
                   name="hora_call"
                   type="time"
                   value={form.hora_call}
                   onChange={handleChange}
-                  className="pl-9"
+                  className="pl-9 h-9 text-sm"
                   required
                 />
               </div>
@@ -200,61 +206,43 @@ export function CalendlyDataForm({ lead }: { lead: Lead }) {
           </div>
 
           {/* Nombre real + Apellido */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="nombre_real">Nombre real</Label>
-              <Input
-                id="nombre_real"
-                name="nombre_real"
-                value={form.nombre_real}
-                onChange={handleChange}
-                placeholder="Máximo"
-              />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="nombre_real" className="text-xs font-medium flex items-center gap-1">
+                <HiOutlineUser className="h-3 w-3" /> Nombre
+              </Label>
+              <Input id="nombre_real" name="nombre_real" value={form.nombre_real} onChange={handleChange} placeholder="Máximo" className="h-9 text-sm" />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="apellido">Apellido</Label>
-              <Input
-                id="apellido"
-                name="apellido"
-                value={form.apellido}
-                onChange={handleChange}
-                placeholder="Pereyra"
-              />
+            <div className="space-y-1.5">
+              <Label htmlFor="apellido" className="text-xs font-medium">Apellido</Label>
+              <Input id="apellido" name="apellido" value={form.apellido} onChange={handleChange} placeholder="Pereyra" className="h-9 text-sm" />
             </div>
           </div>
 
           {/* Edad + Trabajo */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="edad">Edad</Label>
-              <Input
-                id="edad"
-                name="edad"
-                value={form.edad}
-                onChange={handleChange}
-                placeholder="Ej: 40"
-              />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="edad" className="text-xs font-medium">Edad</Label>
+              <Input id="edad" name="edad" value={form.edad} onChange={handleChange} placeholder="40" className="h-9 text-sm" />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="trabajo">Trabajo</Label>
-              <Input
-                id="trabajo"
-                name="trabajo"
-                value={form.trabajo}
-                onChange={handleChange}
-                placeholder="CEO de empresa de logística..."
-              />
+            <div className="space-y-1.5">
+              <Label htmlFor="trabajo" className="text-xs font-medium flex items-center gap-1">
+                <HiOutlineBriefcase className="h-3 w-3" /> Trabajo
+              </Label>
+              <Input id="trabajo" name="trabajo" value={form.trabajo} onChange={handleChange} placeholder="CEO de..." className="h-9 text-sm" />
             </div>
           </div>
 
           {/* Closer */}
-          <div className="space-y-2">
-            <Label>Closer</Label>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium flex items-center gap-1">
+              <HiOutlineUserGroup className="h-3 w-3" /> Closer
+            </Label>
             <Select
               value={form.closer_id}
               onValueChange={(v) => setForm((prev) => ({ ...prev, closer_id: v ?? "" }))}
             >
-              <SelectTrigger className="w-full cursor-pointer">
+              <SelectTrigger className="w-full cursor-pointer h-9 text-sm">
                 <SelectValue placeholder="Asignar closer" />
               </SelectTrigger>
               <SelectContent>
@@ -268,70 +256,76 @@ export function CalendlyDataForm({ lead }: { lead: Lead }) {
           </div>
 
           {/* Contacto + Correo */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="celular">Contacto (con el +)</Label>
-              <Input
-                id="celular"
-                name="celular"
-                value={form.celular}
-                onChange={handleChange}
-                placeholder="+54 11 1234 5678"
-              />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="celular" className="text-xs font-medium flex items-center gap-1">
+                <HiOutlinePhone className="h-3 w-3" /> Contacto
+              </Label>
+              <Input id="celular" name="celular" value={form.celular} onChange={handleChange} placeholder="+54 11..." className="h-9 text-sm" />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="email">Correo</Label>
-              <Input
-                id="email"
-                name="email"
-                type="email"
-                value={form.email}
-                onChange={handleChange}
-                placeholder="val@ejemplo.com"
-              />
+            <div className="space-y-1.5">
+              <Label htmlFor="email" className="text-xs font-medium flex items-center gap-1">
+                <HiOutlineEnvelope className="h-3 w-3" /> Correo
+              </Label>
+              <Input id="email" name="email" type="email" value={form.email} onChange={handleChange} placeholder="mail@..." className="h-9 text-sm" />
             </div>
           </div>
 
           {/* Respuestas */}
-          <div className="space-y-2">
-            <Label htmlFor="respuestas">Respuestas</Label>
+          <div className="space-y-1.5">
+            <Label htmlFor="respuestas" className="text-xs font-medium">Respuestas / Notas</Label>
             <Textarea
               id="respuestas"
               name="respuestas"
               value={form.respuestas}
               onChange={handleChange}
               placeholder="Lo que comentó el lead sobre su situación..."
-              rows={4}
+              rows={3}
+              className="text-sm resize-none"
             />
           </div>
 
-          {/* Preview */}
-          <div className="rounded-lg bg-muted/60 p-3 text-xs font-mono whitespace-pre-wrap leading-relaxed text-muted-foreground border">
-            {buildPlantilla()}
+          {/* Preview colapsable */}
+          <div className="rounded-lg border overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setShowPreview((v) => !v)}
+              className="w-full flex items-center justify-between px-3 py-2 text-xs font-medium text-muted-foreground hover:bg-muted/50 transition-colors cursor-pointer"
+            >
+              <span className="flex items-center gap-1.5">
+                {showPreview ? <HiOutlineEyeSlash className="h-3.5 w-3.5" /> : <HiOutlineEye className="h-3.5 w-3.5" />}
+                {showPreview ? "Ocultar plantilla" : "Ver plantilla"}
+              </span>
+              <span className="text-[10px] text-muted-foreground/50">pre-visualización</span>
+            </button>
+            {showPreview && (
+              <div className="px-3 py-2.5 bg-muted/40 text-[11px] font-mono whitespace-pre-wrap leading-relaxed text-muted-foreground border-t">
+                {buildPlantilla()}
+              </div>
+            )}
           </div>
 
           {/* Botones */}
-          <div className="flex gap-2">
+          <div className="grid grid-cols-2 gap-2 pt-1">
             <Button
               type="button"
               variant="outline"
-              className="flex-1 cursor-pointer"
+              className="cursor-pointer h-10"
               onClick={handleCopy}
             >
-              {copied ? (
-                <HiOutlineCheck className="mr-2 h-4 w-4 text-green-600" />
-              ) : (
-                <HiOutlineClipboardDocument className="mr-2 h-4 w-4" />
-              )}
-              {copied ? "¡Copiado!" : "Copiar plantilla"}
+              {copied
+                ? <HiOutlineCheck className="mr-1.5 h-4 w-4 text-green-600 shrink-0" />
+                : <HiOutlineClipboardDocument className="mr-1.5 h-4 w-4 shrink-0" />
+              }
+              {copied ? "¡Copiado!" : "Copiar"}
             </Button>
             <Button
               type="submit"
-              className="flex-1 cursor-pointer"
+              className="cursor-pointer h-10"
               disabled={updateLead.isPending}
             >
-              <HiOutlineCalendarDays className="mr-2 h-4 w-4" />
-              {updateLead.isPending ? "Guardando..." : "Guardar y pasar a seguimiento"}
+              <HiOutlineCalendarDays className="mr-1.5 h-4 w-4 shrink-0" />
+              {updateLead.isPending ? "Guardando..." : "Guardar"}
             </Button>
           </div>
         </form>

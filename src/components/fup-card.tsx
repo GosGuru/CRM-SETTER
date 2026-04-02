@@ -62,7 +62,9 @@ export const FupCard = memo(function FupCard({
         "transition-all duration-200 group",
         fup.completado
           ? "bg-green-50 dark:bg-green-950/20 border-l-4 border-l-green-500"
-          : "border-l-4 border-l-amber-400 hover:shadow-sm"
+          : lead?.cliente_potencial && lead?.califica_economicamente
+            ? "border-l-4 border-l-amber-400 ring-2 ring-amber-400 bg-amber-50/30 hover:shadow-sm"
+            : "border-l-4 border-l-amber-400 hover:shadow-sm"
       )}
     >
       <CardContent className="py-2.5 px-3">
@@ -87,29 +89,39 @@ export const FupCard = memo(function FupCard({
           {/* Info principal */}
           <div className="flex-1 min-w-0 space-y-1">
 
-            {/* Fila 1: nombre + copy + estado */}
-            <div className="flex items-center gap-1.5">
-              <p
-                className={cn(
-                  "font-semibold text-sm leading-tight cursor-pointer hover:underline truncate",
-                  fup.completado && "text-muted-foreground line-through"
+{/* Fila 1: nombre + copy + estado + flags */}
+              <div className="flex items-center gap-1.5">
+                <p
+                  className={cn(
+                    "font-semibold text-sm leading-tight cursor-pointer hover:underline truncate",
+                    fup.completado && "text-muted-foreground line-through"
+                  )}
+                  onClick={() => lead && router.push(`/leads/${lead.id}`)}
+                >
+                  {displayName}
+                </p>
+                <button
+                  type="button"
+                  onClick={handleCopyName}
+                  title="Copiar nombre"
+                  className="shrink-0 text-muted-foreground/40 hover:text-muted-foreground transition-colors cursor-pointer"
+                  aria-label="Copiar nombre"
+                >
+                  {copied
+                    ? <HiOutlineClipboardDocumentCheck className="h-3.5 w-3.5 text-green-500" />
+                    : <HiOutlineClipboard className="h-3.5 w-3.5" />
+                  }
+                </button>
+                {lead?.cliente_potencial && (
+                  <span className="inline-flex items-center gap-0.5 rounded-full bg-violet-100 text-violet-700 px-1.5 py-0.5 text-[10px] font-semibold leading-none shrink-0">
+                    ⚡ Potencial
+                  </span>
                 )}
-                onClick={() => lead && router.push(`/leads/${lead.id}`)}
-              >
-                {displayName}
-              </p>
-              <button
-                type="button"
-                onClick={handleCopyName}
-                title="Copiar nombre"
-                className="shrink-0 text-muted-foreground/40 hover:text-muted-foreground transition-colors cursor-pointer"
-                aria-label="Copiar nombre"
-              >
-                {copied
-                  ? <HiOutlineClipboardDocumentCheck className="h-3.5 w-3.5 text-green-500" />
-                  : <HiOutlineClipboard className="h-3.5 w-3.5" />
-                }
-              </button>
+                {lead?.califica_economicamente && (
+                  <span className="inline-flex items-center gap-0.5 rounded-full bg-emerald-100 text-emerald-700 px-1.5 py-0.5 text-[10px] font-semibold leading-none shrink-0">
+                    💰 Califica
+                  </span>
+                )}
               {lead && (
                 <span className="ml-auto shrink-0">
                   <StatusBadge estado={lead.estado} compact />

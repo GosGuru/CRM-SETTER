@@ -2,6 +2,7 @@
 
 import { use, useEffect, useState } from "react";
 import { localDateStr } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { useLead, useUpdateLead } from "@/hooks/use-leads";
 import { useInteractions, useCreateInteraction, useDeleteInteraction } from "@/hooks/use-interactions";
 import { useLeadFollowups } from "@/hooks/use-followups";
@@ -40,6 +41,8 @@ import {
   HiOutlineClock,
   HiOutlineClipboardDocumentCheck,
   HiOutlineTrash,
+  HiOutlineBoltSlash,
+  HiOutlineBolt,
 } from "react-icons/hi2";
 import Link from "next/link";
 import type { LeadEstado, InteractionTipo } from "@/types/database";
@@ -198,9 +201,23 @@ export default function LeadDetailPage({
 
   if (isLoading) {
     return (
-      <div className="space-y-4">
-        <div className="h-8 w-32 bg-muted animate-pulse rounded" />
-        <div className="h-64 bg-muted animate-pulse rounded-lg" />
+      <div className="max-w-4xl mx-auto space-y-6">
+        <div className="flex items-center justify-between">
+          <div className="h-5 w-24 bg-muted animate-pulse rounded" />
+          <div className="flex items-center gap-2">
+            <div className="h-6 w-36 bg-muted animate-pulse rounded" />
+            <div className="h-5 w-16 bg-muted animate-pulse rounded-full" />
+          </div>
+        </div>
+        <div className="h-24 bg-muted animate-pulse rounded-xl" />
+        <div className="h-20 bg-muted animate-pulse rounded-xl" />
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="h-96 bg-muted animate-pulse rounded-xl" />
+          <div className="space-y-4">
+            <div className="h-44 bg-muted animate-pulse rounded-xl" />
+            <div className="h-32 bg-muted animate-pulse rounded-xl" />
+          </div>
+        </div>
       </div>
     );
   }
@@ -218,7 +235,7 @@ export default function LeadDetailPage({
   return (
     <div className="max-w-4xl mx-auto space-y-6 animate-blur-in">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between">
         <Link
           href="/leads"
           className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground transition-colors"
@@ -227,7 +244,7 @@ export default function LeadDetailPage({
           Volver a leads
         </Link>
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-lg font-semibold">{lead.nombre}</span>
+          <span className="text-lg font-semibold leading-tight">{lead.nombre}</span>
           <StatusBadge estado={lead.estado} />
           {leadFups && leadFups.length > 0 && (
             <Badge variant="outline" className="text-xs text-indigo-600 border-indigo-200 bg-indigo-50">
@@ -246,7 +263,8 @@ export default function LeadDetailPage({
         defaultDate={fupDefaultDate}
       />
 
-      {/* Nombre completo */}
+      {/* Nombre completo — solo en modo con agenda (sin agenda lo maneja CalendlyDataForm) */}
+      {tieneAgenda && (
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Nombre completo</CardTitle>
@@ -291,6 +309,66 @@ export default function LeadDetailPage({
           </div>
         </CardContent>
       </Card>
+      )}
+
+      {/* Calificación del lead */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Calificación</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-3">
+          {/* Cliente potencial */}
+          <button
+            type="button"
+            disabled={updateLead.isPending}
+            onClick={() =>
+              updateLead.mutate(
+                { id: lead.id, cliente_potencial: !lead.cliente_potencial },
+                { onSuccess: () => toast.success(lead.cliente_potencial ? "Cliente potencial desactivado" : "Marcado como cliente potencial") }
+              )
+            }
+            className={cn(
+              "flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-all cursor-pointer border-2",
+              lead.cliente_potencial
+                ? "bg-violet-100 border-violet-400 text-violet-800 shadow-sm"
+                : "bg-muted/50 border-transparent text-muted-foreground hover:border-violet-300 hover:bg-violet-50 hover:text-violet-700"
+            )}
+          >
+            {lead.cliente_potencial
+              ? <HiOutlineBolt className="h-4 w-4 text-violet-600" />
+              : <HiOutlineBoltSlash className="h-4 w-4" />
+            }
+            Cliente potencial
+          </button>
+
+          {/* Califica económicamente */}
+          <button
+            type="button"
+            disabled={updateLead.isPending}
+            onClick={() =>
+              updateLead.mutate(
+                { id: lead.id, califica_economicamente: !lead.califica_economicamente },
+                { onSuccess: () => toast.success(lead.califica_economicamente ? "Calificación económica desactivada" : "Marcado como califica económicamente") }
+              )
+            }
+            className={cn(
+              "flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-all cursor-pointer border-2",
+              lead.califica_economicamente
+                ? "bg-emerald-100 border-emerald-400 text-emerald-800 shadow-sm"
+                : "bg-muted/50 border-transparent text-muted-foreground hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700"
+            )}
+          >
+            <HiOutlineBanknotes className={cn("h-4 w-4", lead.califica_economicamente ? "text-emerald-600" : "")} />
+            Califica económicamente
+          </button>
+
+          {lead.cliente_potencial && lead.califica_economicamente && (
+            <span className="self-center text-[11px] font-semibold text-amber-600 bg-amber-100 px-2.5 py-1.5 rounded-full">
+              ⭐ Lead de alta prioridad
+            </span>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Contenido condicional: sin agenda vs con agenda */}
       {!tieneAgenda ? (
@@ -304,11 +382,11 @@ export default function LeadDetailPage({
               <CardHeader className="pb-3">
                 <CardTitle className="text-lg">Acciones rápidas</CardTitle>
               </CardHeader>
-              <CardContent className="flex flex-wrap gap-2">
+              <CardContent className="grid grid-cols-2 gap-2">
                 <Button
                   variant="outline"
                   size="sm"
-                  className="cursor-pointer"
+                  className="cursor-pointer h-11 justify-start"
                   disabled={createInteraction.isPending}
                   onClick={() => quickAction("whatsapp", "FUP enviado")}
                 >
@@ -317,7 +395,7 @@ export default function LeadDetailPage({
                 <Button
                   variant="outline"
                   size="sm"
-                  className="cursor-pointer"
+                  className="cursor-pointer h-11 justify-start"
                   disabled={createInteraction.isPending}
                   onClick={() => quickAction("llamada", "Llamada realizada")}
                 >
@@ -326,7 +404,7 @@ export default function LeadDetailPage({
                 <Button
                   variant="outline"
                   size="sm"
-                  className="cursor-pointer"
+                  className="cursor-pointer h-11 justify-start"
                   disabled={createInteraction.isPending}
                   onClick={() => quickAction("calendario_enviado", "Calendario enviado")}
                 >
@@ -335,7 +413,7 @@ export default function LeadDetailPage({
                 <Button
                   variant="outline"
                   size="sm"
-                  className="cursor-pointer text-indigo-600 border-indigo-200 hover:bg-indigo-50"
+                  className="cursor-pointer h-11 justify-start text-indigo-600 border-indigo-200 hover:bg-indigo-50"
                   onClick={handleFupManana}
                 >
                   <HiOutlineClipboardDocumentCheck className="mr-1.5 h-4 w-4" /> FUP Mañana
@@ -343,10 +421,10 @@ export default function LeadDetailPage({
                 <Button
                   variant="outline"
                   size="sm"
-                  className="cursor-pointer"
+                  className="cursor-pointer h-11 justify-start"
                   onClick={handleProgramarFup}
                 >
-                  <HiOutlineClipboardDocumentCheck className="mr-1.5 h-4 w-4" /> Programar FUP
+                  <HiOutlineClipboardDocumentCheck className="mr-1.5 h-4 w-4" /> Prog. FUP
                 </Button>
                 <Popover open={seguimientoOpen} onOpenChange={setSeguimientoOpen}>
                   <PopoverTrigger
@@ -354,7 +432,7 @@ export default function LeadDetailPage({
                       <Button
                         variant="outline"
                         size="sm"
-                        className="cursor-pointer"
+                        className="cursor-pointer h-11 justify-start w-full"
                         disabled={updateLead.isPending}
                       />
                     }
@@ -373,7 +451,7 @@ export default function LeadDetailPage({
                 <Button
                   variant="outline"
                   size="sm"
-                  className="cursor-pointer"
+                  className="cursor-pointer h-11 justify-start"
                   disabled={updateLead.isPending}
                   onClick={() => handleEstadoChange("seguimiento")}
                 >
@@ -382,7 +460,7 @@ export default function LeadDetailPage({
                 <Button
                   variant="outline"
                   size="sm"
-                  className="cursor-pointer text-green-600 border-green-200 hover:bg-green-50"
+                  className="cursor-pointer h-11 justify-start text-green-600 border-green-200 hover:bg-green-50"
                   disabled={updateLead.isPending}
                   onClick={() => handleEstadoChange("pagó")}
                 >
@@ -484,11 +562,11 @@ export default function LeadDetailPage({
               <CardHeader className="pb-3">
                 <CardTitle className="text-lg">Acciones rápidas</CardTitle>
               </CardHeader>
-              <CardContent className="flex flex-wrap gap-2">
+              <CardContent className="grid grid-cols-2 gap-2">
                 <Button
                   variant="outline"
                   size="sm"
-                  className="cursor-pointer"
+                  className="cursor-pointer h-11 justify-start"
                   disabled={createInteraction.isPending}
                   onClick={() => quickAction("llamada", "Llamada realizada")}
                 >
@@ -497,7 +575,7 @@ export default function LeadDetailPage({
                 <Button
                   variant="outline"
                   size="sm"
-                  className="cursor-pointer"
+                  className="cursor-pointer h-11 justify-start"
                   disabled={createInteraction.isPending}
                   onClick={() => quickAction("whatsapp", "WhatsApp enviado")}
                 >
@@ -506,7 +584,7 @@ export default function LeadDetailPage({
                 <Button
                   variant="outline"
                   size="sm"
-                  className="cursor-pointer"
+                  className="cursor-pointer h-11 justify-start"
                   disabled={createInteraction.isPending}
                   onClick={() => quickAction("calendario_enviado", "Calendario enviado")}
                 >
@@ -515,7 +593,7 @@ export default function LeadDetailPage({
                 <Button
                   variant="outline"
                   size="sm"
-                  className="cursor-pointer text-indigo-600 border-indigo-200 hover:bg-indigo-50"
+                  className="cursor-pointer h-11 justify-start text-indigo-600 border-indigo-200 hover:bg-indigo-50"
                   onClick={handleFupManana}
                 >
                   <HiOutlineClipboardDocumentCheck className="mr-1.5 h-4 w-4" /> FUP Mañana
@@ -526,7 +604,7 @@ export default function LeadDetailPage({
                       <Button
                         variant="outline"
                         size="sm"
-                        className="cursor-pointer"
+                        className="cursor-pointer h-11 justify-start w-full"
                         disabled={updateLead.isPending}
                       />
                     }
@@ -545,7 +623,7 @@ export default function LeadDetailPage({
                 <Button
                   variant="outline"
                   size="sm"
-                  className="cursor-pointer"
+                  className="cursor-pointer h-11 justify-start"
                   disabled={updateLead.isPending}
                   onClick={() => handleEstadoChange("seguimiento")}
                 >
@@ -554,7 +632,7 @@ export default function LeadDetailPage({
                 <Button
                   variant="outline"
                   size="sm"
-                  className="cursor-pointer text-green-600 border-green-200 hover:bg-green-50"
+                  className="cursor-pointer h-11 justify-start text-green-600 border-green-200 hover:bg-green-50"
                   disabled={updateLead.isPending}
                   onClick={() => handleEstadoChange("pagó")}
                 >
@@ -563,51 +641,48 @@ export default function LeadDetailPage({
               </CardContent>
             </Card>
 
-            {/* Cambiar estado */}
+            {/* Estado + Closer */}
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-lg">Estado del lead</CardTitle>
+                <CardTitle className="text-base">Estado y closer</CardTitle>
               </CardHeader>
-              <CardContent>
-                <Select
-                  value={lead.estado}
-                  onValueChange={(v) => handleEstadoChange(v as LeadEstado)}
-                >
-                  <SelectTrigger className="cursor-pointer">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {estados.map((e) => (
-                      <SelectItem key={e.value} value={e.value} className="cursor-pointer">
-                        {e.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </CardContent>
-            </Card>
-
-            {/* Asignar closer */}
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-lg">Closer asignado</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <Select
-                  value={lead.closer_id ?? ""}
-                  onValueChange={handleCloserChange}
-                >
-                  <SelectTrigger className="cursor-pointer">
-                    <SelectValue placeholder="Seleccionar closer" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {closers?.map((closer) => (
-                      <SelectItem key={closer.id} value={closer.id} className="cursor-pointer">
-                        {closer.full_name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-xs text-muted-foreground font-medium">Estado</label>
+                  <Select
+                    value={lead.estado}
+                    onValueChange={(v) => handleEstadoChange(v as LeadEstado)}
+                  >
+                    <SelectTrigger className="cursor-pointer">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {estados.map((e) => (
+                        <SelectItem key={e.value} value={e.value} className="cursor-pointer">
+                          {e.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs text-muted-foreground font-medium">Closer</label>
+                  <Select
+                    value={lead.closer_id ?? ""}
+                    onValueChange={handleCloserChange}
+                  >
+                    <SelectTrigger className="cursor-pointer">
+                      <SelectValue placeholder="Seleccionar closer" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {closers?.map((closer) => (
+                        <SelectItem key={closer.id} value={closer.id} className="cursor-pointer">
+                          {closer.full_name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </CardContent>
             </Card>
 

@@ -47,6 +47,8 @@ export interface Lead {
   plan_pago: PlanPago | null;
   monto_programa: number | null;
   fecha_pago: string | null;
+  cliente_potencial: boolean;
+  califica_economicamente: boolean;
   created_at: string;
   updated_at: string;
   // Joins opcionales
