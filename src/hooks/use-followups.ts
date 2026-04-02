@@ -14,7 +14,7 @@ export function useFollowups(fecha: string) {
     queryFn: async () => {
       const { data, error } = await getSupabase()
         .from("followups")
-        .select("*, lead:leads(*, closer:users!leads_closer_id_fkey(*))")
+        .select("*, lead:leads(*, closer:users!leads_closer_id_fkey(*), interactions(id,tipo,contenido,created_at))")
         .eq("fecha_programada", fecha)
         .order("completado", { ascending: true })
         .order("created_at", { ascending: true });

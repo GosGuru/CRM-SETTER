@@ -142,7 +142,7 @@ type FlatItem =
 
 // Estimated heights for the virtualizer
 const HEADER_HEIGHT = 36;
-const LEAD_HEIGHT = 80;
+const LEAD_HEIGHT = 100;
 
 export default function LeadsPage() {
   const filtroEstado = useUIStore((s) => s.filtroEstado);

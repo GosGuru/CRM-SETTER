@@ -52,6 +52,7 @@ export interface Lead {
   // Joins opcionales
   closer?: User | null;
   setter?: User | null;
+  interactions?: Interaction[];
 }
 
 export interface Interaction {

@@ -1,6 +1,6 @@
 "use client";
 
-import { memo } from "react";
+import { memo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { StatusBadge } from "@/components/status-badge";
@@ -12,10 +12,12 @@ import {
   HiOutlineCheck,
   HiOutlineChatBubbleBottomCenterText,
   HiOutlineBriefcase,
-  HiOutlineUserCircle,
+  HiOutlineClipboard,
+  HiOutlineClipboardDocumentCheck,
 } from "react-icons/hi2";
 import { Pin } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 interface LeadCardProps {
   lead: Lead;
@@ -28,6 +30,17 @@ interface LeadCardProps {
 
 export const LeadCard = memo(function LeadCardInner({ lead, selectable, selected, onToggle, onTogglePin, lastNote }: LeadCardProps) {
   const router = useRouter();
+  const [copied, setCopied] = useState(false);
+
+  // Nombre principal: nombre_real + apellido si existen, si no, lead.nombre
+  const primaryName = lead.nombre_real
+    ? `${lead.nombre_real}${lead.apellido ? " " + lead.apellido : ""}`
+    : lead.nombre;
+
+  // Handle de Instagram (nombre) como secundario si ya tenemos nombre_real
+  const showHandle = lead.nombre_real && lead.nombre
+    ? lead.nombre
+    : null;
 
   const fechaCall = lead.fecha_call
     ? new Date(lead.fecha_call).toLocaleDateString("es-AR", {
@@ -51,13 +64,21 @@ export const LeadCard = memo(function LeadCardInner({ lead, selectable, selected
     }
   };
 
-  // Cuántos datos tiene completados (para indicador de completitud)
+  const handleCopyName = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    navigator.clipboard.writeText(primaryName);
+    setCopied(true);
+    toast.success("Nombre copiado");
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  // Completion score for the progress bar
   const datosCompletos = [lead.celular, lead.email, lead.instagram, lead.objetivo, lead.trabajo].filter(Boolean).length;
 
   return (
     <Card
       onClick={handleCardClick}
-      style={{ contentVisibility: "auto", containIntrinsicSize: "0 80px" }}
+      style={{ contentVisibility: "auto", containIntrinsicSize: "0 90px" }}
       className={cn(
         "transition-all duration-200 cursor-pointer hover:shadow-md group",
         selected && "ring-2 ring-primary bg-primary/5",
@@ -68,8 +89,8 @@ export const LeadCard = memo(function LeadCardInner({ lead, selectable, selected
         lead.estado === "nuevo" && "border-l-4 border-l-blue-400"
       )}
     >
-      <CardContent className="py-3 px-4">
-        <div className="flex items-start gap-3">
+      <CardContent className="py-2.5 px-3">
+        <div className="flex items-start gap-2.5">
           {selectable && (
             <div
               className={cn(
@@ -83,113 +104,125 @@ export const LeadCard = memo(function LeadCardInner({ lead, selectable, selected
             </div>
           )}
 
-          <div className="flex-1 min-w-0">
-            {/* Fila 1: Nombre + Estado + Agenda */}
-            <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-              <p className="font-semibold text-sm truncate">{lead.nombre}</p>
-              <StatusBadge estado={lead.estado} />
-              {fechaCall ? (
-                <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded-full">
-                  <HiOutlineCalendarDays className="h-3 w-3" />
-                  {fechaCall} · {horaCall}
-                </span>
-              ) : (
-                <span className="text-[11px] font-medium text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded-full">
-                  Sin agendar
-                </span>
-              )}
+          <div className="flex-1 min-w-0 space-y-1">
+
+            {/* Fila 1: nombre + copy + estado + fecha call */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="font-semibold text-sm leading-tight truncate">
+                {primaryName}
+              </span>
+              <button
+                type="button"
+                onClick={handleCopyName}
+                title="Copiar nombre"
+                className="shrink-0 text-muted-foreground/40 hover:text-muted-foreground transition-colors cursor-pointer"
+                aria-label="Copiar nombre"
+              >
+                {copied
+                  ? <HiOutlineClipboardDocumentCheck className="h-3.5 w-3.5 text-green-500" />
+                  : <HiOutlineClipboard className="h-3.5 w-3.5" />
+                }
+              </button>
+              <StatusBadge estado={lead.estado} compact />
+              <span className="ml-auto shrink-0">
+                {fechaCall ? (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded-full">
+                    <HiOutlineCalendarDays className="h-3 w-3" />
+                    {fechaCall} · {horaCall}
+                  </span>
+                ) : (
+                  <span className="text-[11px] font-medium text-orange-500/80 bg-orange-50 px-1.5 py-0.5 rounded-full">
+                    Sin agendar
+                  </span>
+                )}
+              </span>
             </div>
 
-            {/* Fila 2: Detalles de contacto + objetivo */}
-            <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
+            {/* Fila 2: handle/teléfono/trabajo/closer */}
+            <div className="flex items-center gap-2.5 text-[11px] text-muted-foreground flex-wrap">
+              {showHandle && (
+                <span className="text-violet-500/80 truncate max-w-27.5">
+                  @{showHandle.replace("@", "")}
+                </span>
+              )}
               {lead.celular && (
-                <span className="flex items-center gap-1">
-                  <HiOutlinePhone className="h-3 w-3 shrink-0" />
+                <span className="flex items-center gap-1 shrink-0">
+                  <HiOutlinePhone className="h-3 w-3" />
                   {lead.celular}
                 </span>
               )}
-              {lead.instagram && (
-                <span className="truncate max-w-[120px]">
+              {!showHandle && lead.instagram && (
+                <span className="text-violet-500/80 truncate max-w-27.5">
                   @{lead.instagram.replace("@", "")}
                 </span>
               )}
               {lead.trabajo && (
-                <span className="hidden sm:flex items-center gap-1 truncate max-w-[140px]">
+                <span className="hidden sm:flex items-center gap-1 truncate max-w-35">
                   <HiOutlineBriefcase className="h-3 w-3 shrink-0" />
                   {lead.trabajo}
                 </span>
               )}
-              {lead.objetivo && (
-                <span className="hidden md:inline truncate max-w-[160px] text-primary/70 font-medium">
-                  🎯 {lead.objetivo}
-                </span>
-              )}
               {lead.closer && (
-                <span className="hidden lg:flex items-center gap-1">
-                  <HiOutlineUserCircle className="h-3 w-3 shrink-0" />
+                <span className="hidden lg:inline truncate text-muted-foreground/60">
                   {lead.closer.full_name}
                 </span>
               )}
             </div>
 
-            {/* Fila 3: Notas/respuestas (si existen) */}
-            {lead.respuestas && (
-              <div className="mt-1.5 flex items-start gap-1.5 text-xs text-muted-foreground/80 bg-muted/50 rounded-md px-2 py-1.5">
-                <HiOutlineChatBubbleBottomCenterText className="h-3 w-3 shrink-0 mt-0.5" />
-                <p className="line-clamp-2 leading-relaxed">{lead.respuestas}</p>
+            {/* Fila 3: última nota (todos los breakpoints) */}
+            {lastNote && (
+              <div className="flex items-start gap-1.5 bg-muted/50 rounded-md px-2 py-1.5">
+                <HiOutlineChatBubbleBottomCenterText className="h-3 w-3 shrink-0 mt-0.5 text-muted-foreground/60" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-[11px] text-muted-foreground leading-snug line-clamp-2">
+                    {lastNote.contenido}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground/50 mt-0.5">
+                    {new Date(lastNote.created_at).toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" })}
+                    {" · "}
+                    {new Date(lastNote.created_at).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}
+                  </p>
+                </div>
               </div>
             )}
 
-            {/* Fila 4: Indicadores rápidos (dots) */}
+            {/* Fila 4: barra de completitud */}
             {datosCompletos > 0 && (
-              <div className="mt-1.5 flex items-center gap-1">
+              <div className="flex items-center gap-1">
                 {[...Array(5)].map((_, i) => (
                   <div
                     key={i}
                     className={cn(
-                      "h-1 w-4 rounded-full transition-colors",
-                      i < datosCompletos ? "bg-primary/60" : "bg-muted"
+                      "h-0.5 w-5 rounded-full transition-colors",
+                      i < datosCompletos ? "bg-primary/50" : "bg-muted"
                     )}
                   />
                 ))}
-                <span className="text-[10px] text-muted-foreground ml-1">{datosCompletos}/5 datos</span>
+                <span className="text-[10px] text-muted-foreground/50 ml-1">{datosCompletos}/5</span>
               </div>
             )}
           </div>
 
-          {/* Última nota — visible en desktop */}
-          {lastNote && (
-            <div className="hidden lg:flex items-start gap-2 shrink-0 max-w-[280px] xl:max-w-[360px] border-l pl-3 ml-1">
-              <HiOutlineChatBubbleBottomCenterText className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-0.5" />
-              <div className="min-w-0">
-                <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">{lastNote.contenido}</p>
-                <p className="text-[10px] text-muted-foreground/60 mt-0.5">
-                  {new Date(lastNote.created_at).toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" })}{" · "}
-                  {new Date(lastNote.created_at).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}
-                </p>
-              </div>
-            </div>
-          )}
-
-          {/* Pin button */}
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onTogglePin?.(lead.id, !lead.pinned);
-            }}
-            className={cn(
-              "shrink-0 mt-0.5 p-1 rounded-md transition-all",
-              lead.pinned
-                ? "text-amber-500 bg-amber-100 hover:bg-amber-200"
-                : "text-muted-foreground/40 opacity-0 group-hover:opacity-100 hover:text-amber-500 hover:bg-amber-50"
-            )}
-            title={lead.pinned ? "Desfijar" : "Fijar"}
-          >
-            <Pin className={cn("h-3.5 w-3.5", lead.pinned && "fill-amber-500")} />
-          </button>
-
-          <HiOutlineChevronRight className="h-4 w-4 text-muted-foreground shrink-0 mt-1 opacity-0 group-hover:opacity-100 transition-opacity" />
+          {/* Acciones */}
+          <div className="flex items-center gap-0.5 shrink-0 mt-0.5">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onTogglePin?.(lead.id, !lead.pinned);
+              }}
+              className={cn(
+                "p-1 rounded-md transition-all",
+                lead.pinned
+                  ? "text-amber-500 bg-amber-100 hover:bg-amber-200"
+                  : "text-muted-foreground/30 hover:text-amber-500 hover:bg-amber-50"
+              )}
+              title={lead.pinned ? "Desfijar" : "Fijar"}
+            >
+              <Pin className={cn("h-3.5 w-3.5", lead.pinned && "fill-amber-500")} />
+            </button>
+            <HiOutlineChevronRight className="h-4 w-4 text-muted-foreground/40 opacity-0 group-hover:opacity-100 transition-opacity" />
+          </div>
         </div>
       </CardContent>
     </Card>
