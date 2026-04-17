@@ -59,7 +59,7 @@ export function WhatsAppTemplate({ lead }: { lead: Lead }) {
   return (
     <Card>
       <CardHeader className="pb-3">
-        <CardTitle className="text-lg">Plantilla WhatsApp</CardTitle>
+        <CardTitle className="text-xl font-bold">Plantilla WhatsApp</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
         {templates && templates.length > 0 && (
@@ -79,7 +79,7 @@ export function WhatsAppTemplate({ lead }: { lead: Lead }) {
             </SelectContent>
           </Select>
         )}
-        <div className="rounded-md bg-muted p-3 text-sm whitespace-pre-wrap font-mono">
+        <div className="rounded-md bg-muted p-3 text-base whitespace-pre-wrap font-mono">
           {message}
         </div>
         <Button onClick={handleCopy} className="w-full cursor-pointer" variant={copied ? "outline" : "default"}>

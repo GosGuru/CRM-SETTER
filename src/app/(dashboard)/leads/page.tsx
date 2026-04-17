@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect, useLayoutEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { createClient } from "@/lib/supabase/client";
@@ -10,6 +11,7 @@ import {
   useBulkUpdateLeads,
   useBulkDeleteLeads,
   useTogglePin,
+  useUpdateLead,
   type SortOption,
 } from "@/hooks/use-leads";
 import { useBulkCreateInteractions } from "@/hooks/use-interactions";
@@ -40,6 +42,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   HiOutlinePlusCircle,
   HiOutlineCheckCircle,
@@ -58,6 +61,7 @@ import {
   HiOutlineClipboardDocumentCheck,
   HiOutlineBarsArrowDown,
   HiOutlineBarsArrowUp,
+  HiOutlineArrowUturnLeft,
 } from "react-icons/hi2";
 import { ArrowDownAZ, ArrowUpZA, ListFilter, Star } from "lucide-react";
 import type { Lead, LeadEstado } from "@/types/database";
@@ -66,14 +70,14 @@ import { toast } from "sonner";
 const estados: { value: LeadEstado | "todos"; label: string }[] = [
   { value: "todos", label: "Todos" },
   { value: "nuevo", label: "Nuevos" },
-  { value: "seguimiento", label: "Seguimiento" },
+  { value: "agendó", label: "Agendados" },
   { value: "cerrado", label: "Cerrados" },
   { value: "pagó", label: "Pagaron" },
 ];
 
 const estadoOptions: { value: LeadEstado; label: string }[] = [
   { value: "nuevo", label: "Nuevo" },
-  { value: "seguimiento", label: "Seguimiento" },
+  { value: "agendó", label: "Agendado" },
   { value: "cerrado", label: "Cerrado" },
   { value: "pagó", label: "Pagó" },
 ];
@@ -135,6 +139,41 @@ function groupByDate(leads: Lead[]): { date: string; label: string; leads: Lead[
   });
 }
 
+function groupByScheduleDate(leads: Lead[]): { date: string; label: string; leads: Lead[] }[] {
+  const groups = new Map<string, Lead[]>();
+
+  for (const lead of leads) {
+    // Fall back to updated_at for leads scheduled before fecha_call_set_at was tracked
+    const ts = lead.fecha_call_set_at ?? lead.updated_at;
+    if (!ts) continue;
+    const dateKey = localDateStr(new Date(ts));
+    if (!groups.has(dateKey)) groups.set(dateKey, []);
+    groups.get(dateKey)!.push(lead);
+  }
+
+  const sorted = [...groups.entries()].sort((a, b) => b[0].localeCompare(a[0]));
+
+  const hoy = localDateStr();
+  const ayerDate = new Date(); ayerDate.setDate(ayerDate.getDate() - 1);
+  const ayer = localDateStr(ayerDate);
+
+  return sorted.map(([date, leads]) => {
+    let label: string;
+    if (date === hoy) {
+      label = "📅 Agendados Hoy";
+    } else if (date === ayer) {
+      label = "📅 Agendados Ayer";
+    } else {
+      label = "📅 " + new Date(date + "T12:00:00").toLocaleDateString("es-AR", {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+      });
+    }
+    return { date, label, leads };
+  });
+}
+
 // ── Virtual item types ────────────────────────────────────────────
 type FlatItem =
   | { type: "date-header"; date: string; label: string; dateLeads: Lead[] }
@@ -152,6 +191,7 @@ export default function LeadsPage() {
   const bulkUpdate = useBulkUpdateLeads();
   const bulkDelete = useBulkDeleteLeads();
   const togglePin = useTogglePin();
+  const updateLead = useUpdateLead();
   const bulkInteractions = useBulkCreateInteractions();
   const bulkFollowups = useBulkCreateFollowups();
 
@@ -169,6 +209,10 @@ export default function LeadsPage() {
   const [customDate, setCustomDate] = useState<Date | null>(null);
   const [soloConNotas, setSoloConNotas] = useState(false);
   const [sortBy, setSortBy] = useState<SortOption>("recientes");
+  const [vistaAgendados, setVistaAgendados] = useState(false);
+
+  // ── Per-card date picker state ────────────────────────────────
+  const [cardDatePicker, setCardDatePicker] = useState<{ leadId: string; type: "crm" | "agenda" } | null>(null);
 
   const isSearching = debouncedSearch.trim().length > 0;
 
@@ -183,8 +227,10 @@ export default function LeadsPage() {
   } = useInfiniteLeads({
     filtroEstado,
     search: debouncedSearch || undefined,
-    dateFilter,
-    sortBy,
+    // When vistaAgendados is active, ignore the date filter (show all scheduled)
+    dateFilter: vistaAgendados ? "todos" : dateFilter,
+    sortBy: vistaAgendados ? "agendados" : sortBy,
+    soloAgendados: vistaAgendados,
   });
 
   // Flatten pages
@@ -227,11 +273,12 @@ export default function LeadsPage() {
 
   const activeRestrictiveFilters =
     (filtroEstado !== "todos" ? 1 : 0) +
-    (dateFilter !== "todos" ? 1 : 0) +
-    (soloConNotas ? 1 : 0);
+    (dateFilter !== "todos" && !vistaAgendados ? 1 : 0) +
+    (soloConNotas ? 1 : 0) +
+    (vistaAgendados ? 1 : 0);
 
   // ── Build flat virtual items array ────────────────────────────
-  const useDateGrouping = sortBy === "recientes" || sortBy === "antiguos";
+  const useDateGrouping = sortBy === "recientes" || sortBy === "antiguos" || vistaAgendados;
 
   const flatItems = useMemo((): FlatItem[] => {
     const leads = soloConNotas && interactionsMap
@@ -246,7 +293,7 @@ export default function LeadsPage() {
       }));
     }
 
-    const groups = groupByDate(leads);
+    const groups = vistaAgendados ? groupByScheduleDate(leads) : groupByDate(leads);
     const items: FlatItem[] = [];
     for (const { date, label, leads: dateLeads } of groups) {
       items.push({ type: "date-header", date, label, dateLeads });
@@ -255,7 +302,7 @@ export default function LeadsPage() {
       }
     }
     return items;
-  }, [allLeads, useDateGrouping, soloConNotas, interactionsMap]);
+  }, [allLeads, useDateGrouping, vistaAgendados, soloConNotas, interactionsMap]);
 
   // ── Virtualizer setup ─────────────────────────────────────────
   const listContainerRef = useRef<HTMLDivElement>(null);
@@ -311,6 +358,7 @@ export default function LeadsPage() {
   const [selectMode, setSelectMode] = useState(false);
   const [datePickerOpen, setDatePickerOpen] = useState(false);
   const [seguimientoPickerOpen, setSeguimientoPickerOpen] = useState(false);
+  const [agendadoPickerOpen, setAgendadoPickerOpen] = useState(false);
   const [fupPickerOpen, setFupPickerOpen] = useState(false);
 
   const toggleSelect = (id: string) => {
@@ -325,6 +373,55 @@ export default function LeadsPage() {
   const handleTogglePin = (id: string, pinned: boolean) => {
     togglePin.mutate({ id, pinned });
   };
+
+  const handleCardAction = (leadId: string, action: string) => {
+    const now = new Date().toISOString();
+    switch (action) {
+      case "agendo":
+        updateLead.mutate(
+          { id: leadId, estado: "agendó", fecha_call_set_at: now },
+          { onSuccess: () => toast.success("Lead marcado como Agendó") }
+        );
+        break;
+      case "desagendar":
+        updateLead.mutate(
+          { id: leadId, estado: "nuevo", fecha_call_set_at: null as unknown as string },
+          { onSuccess: () => toast.success("Lead desagendado") }
+        );
+        break;
+      case "pago_reunion":
+        updateLead.mutate(
+          { id: leadId, pago_reunion: true },
+          { onSuccess: () => toast.success("Pago de reunión registrado") }
+        );
+        break;
+      case "nuevo":
+        updateLead.mutate(
+          { id: leadId, estado: "nuevo" },
+          { onSuccess: () => toast.success("Lead movido a Nuevo") }
+        );
+        break;
+      case "cerrado":
+        updateLead.mutate(
+          { id: leadId, estado: "cerrado" },
+          { onSuccess: () => toast.success("Lead marcado como Cerrado") }
+        );
+        break;
+      case "fecha_crm":
+        setCardDatePicker({ leadId, type: "crm" });
+        break;
+      case "fecha_agenda":
+        setCardDatePicker({ leadId, type: "agenda" });
+        break;
+      case "delete":
+        bulkDelete.mutate(
+          [leadId],
+          { onSuccess: () => toast.success("Lead eliminado") }
+        );
+        break;
+    }
+  };
+
 
   const selectAllInDate = (dateLeads: Lead[]) => {
     setSelected((prev) => {
@@ -404,13 +501,36 @@ export default function LeadsPage() {
     );
   };
 
+  const handleBulkAgendadoDate = (date: Date) => {
+    if (!date || selected.size === 0) return;
+    const isoDate = new Date(
+      date.getFullYear(),
+      date.getMonth(),
+      date.getDate(),
+      12, 0, 0
+    ).toISOString();
+    bulkUpdate.mutate(
+      { ids: [...selected], updates: { fecha_call_set_at: isoDate } },
+      {
+        onSuccess: () => {
+          const label = date.toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long" });
+          toast.success(`Fecha de agenda actualizada → ${label}`);
+          setAgendadoPickerOpen(false);
+          exitSelectMode();
+        },
+        onError: (err) => toast.error(`Error: ${err.message}`),
+      }
+    );
+  };
+
+
   const handleBulkSeguimiento = (date: Date) => {
     if (!date || selected.size === 0 || !currentUser) return;
     const fechaCall = new Date(
       date.getFullYear(), date.getMonth(), date.getDate(), 12, 0, 0
     ).toISOString();
     bulkUpdate.mutate(
-      { ids: [...selected], updates: { estado: "seguimiento", fecha_call: fechaCall, fecha_call_set_at: new Date().toISOString() } },
+      { ids: [...selected], updates: { estado: "agendó", fecha_call: fechaCall, fecha_call_set_at: new Date().toISOString() } },
       {
         onSuccess: () => {
           const label = date.toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long" });
@@ -421,7 +541,7 @@ export default function LeadsPage() {
             contenido: `Seguimiento programado para ${label}`,
           }));
           bulkInteractions.mutate(interactions);
-          toast.success(`Seguimiento para ${selected.size} lead(s) → ${date.toLocaleDateString("es-AR", { day: "numeric", month: "long" })}`);
+          toast.success(`Agendado para ${selected.size} lead(s) → ${date.toLocaleDateString("es-AR", { day: "numeric", month: "long" })}`);
           setSeguimientoPickerOpen(false);
           exitSelectMode();
         },
@@ -463,6 +583,27 @@ export default function LeadsPage() {
           }));
           bulkInteractions.mutate(interactions);
           toast.success(`${selected.size} lead(s) → ${label}`);
+          exitSelectMode();
+        },
+        onError: (err) => toast.error(`Error: ${err.message}`),
+      }
+    );
+  };
+
+  const handleBulkDesagendar = () => {
+    if (selected.size === 0 || !currentUser) return;
+    bulkUpdate.mutate(
+      { ids: [...selected], updates: { estado: "nuevo", fecha_call_set_at: null } },
+      {
+        onSuccess: () => {
+          const interactions = [...selected].map((leadId) => ({
+            lead_id: leadId,
+            user_id: currentUser.id,
+            tipo: "cambio_estado" as const,
+            contenido: "Desagendado — volvió a Nuevo",
+          }));
+          bulkInteractions.mutate(interactions);
+          toast.success(`${selected.size} lead(s) desagendado(s)`);
           exitSelectMode();
         },
         onError: (err) => toast.error(`Error: ${err.message}`),
@@ -519,69 +660,37 @@ export default function LeadsPage() {
         </h1>
         
         <div className="flex flex-wrap items-center gap-2">
-          {!selectMode ? (
-            <>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setSelectMode(true)}
-                className="cursor-pointer h-9 px-3 hidden sm:flex"
-              >
-                <HiOutlineCheckCircle className="mr-1 h-4 w-4" />
-                Seleccionar
-              </Button>
-              <div className="hidden sm:block">
-                <CSVUpload />
-              </div>
-              <Button 
-                className="cursor-pointer h-9 px-3 md:px-4 shrink-0 transition-all" 
-                onClick={() => useUIStore.getState().setQuickAddOpen(true)}
-              >
-                <HiOutlinePlusCircle className="mr-1 sm:mr-2 h-4 w-4" />
-                <span>Nuevo Lead</span>
-              </Button>
+          <div className="hidden sm:block">
+            <CSVUpload />
+          </div>
+          <Button 
+            className="cursor-pointer h-9 px-3 md:px-4 shrink-0 transition-all" 
+            onClick={() => useUIStore.getState().setQuickAddOpen(true)}
+          >
+            <HiOutlinePlusCircle className="mr-1 sm:mr-2 h-4 w-4" />
+            <span>Nuevo Lead</span>
+          </Button>
 
-              {/* Menú para Seleccionar / CSV en móvil */}
-              <div className="flex sm:hidden">
-                <Popover>
-                  <PopoverTrigger
-                    render={
-                      <Button variant="outline" size="icon" className="h-9 w-9 shrink-0 cursor-pointer" />
-                    }
-                  >
-                    <HiOutlineArrowPath className="h-4 w-4" /> 
-                    {/* Un icono de menú o más acciones */}
-                  </PopoverTrigger>
-                  <PopoverContent align="end" className="w-48 p-2 flex flex-col gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setSelectMode(true)}
-                      className="cursor-pointer w-full justify-start"
-                    >
-                      <HiOutlineCheckCircle className="mr-2 h-4 w-4" />
-                      Seleccionar Múltiples
-                    </Button>
-                    <CSVUpload />
-                  </PopoverContent>
-                </Popover>
-              </div>
-            </>
-          ) : (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={exitSelectMode}
-              className="cursor-pointer h-9"
-            >
-              <HiOutlineXMark className="mr-1 h-4 w-4" />
-              Cancelar Selección
-            </Button>
-          )}
+          {/* CSV en móvil */}
+          <div className="flex sm:hidden">
+            <Popover>
+              <PopoverTrigger
+                render={
+                  <Button variant="outline" size="icon" className="h-9 w-9 shrink-0 cursor-pointer" />
+                }
+              >
+                <HiOutlineArrowPath className="h-4 w-4" />
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-48 p-2 flex flex-col gap-2">
+                <CSVUpload />
+              </PopoverContent>
+            </Popover>
+          </div>
         </div>
       </div>
 
-      {/* Buscador y Filtros */}
+      {/* Buscador y Filtros — sticky */}
+      <div className="sticky top-0 z-30 -mx-4 px-4 py-2 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 border-b">
       <div className="flex items-center gap-2 w-full animate-blur-fade">
         <div className="relative flex-1 min-w-0">
           <HiOutlineMagnifyingGlass className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -607,6 +716,24 @@ export default function LeadsPage() {
             </button>
           )}
         </div>
+
+        <Button
+            variant={selectMode ? "secondary" : "outline"}
+            className="h-10 px-3 shrink-0 cursor-pointer rounded-xl bg-background"
+            onClick={() => selectMode ? exitSelectMode() : setSelectMode(true)}
+          >
+            {selectMode ? (
+              <>
+                <HiOutlineXMark className="h-4 w-4 sm:mr-1.5" />
+                <span className="hidden sm:inline">Cancelar</span>
+              </>
+            ) : (
+              <>
+                <HiOutlineCheckCircle className="h-4 w-4 sm:mr-1.5" />
+                <span className="hidden sm:inline">Seleccionar</span>
+              </>
+            )}
+          </Button>
 
         <Sheet>
           <SheetTrigger
@@ -725,6 +852,35 @@ export default function LeadsPage() {
                 </div>
               </div>
 
+              {/* Vista Agendados */}
+              <div className="space-y-4">
+                <label className="text-sm font-semibold text-foreground/90 uppercase tracking-wider flex items-center gap-2">
+                  <HiOutlineCalendarDays className="h-4 w-4 text-muted-foreground" />
+                  Vista de Agendados
+                </label>
+                <Button
+                  variant={vistaAgendados ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => {
+                    setVistaAgendados((v) => !v);
+                    if (!vistaAgendados) {
+                      // Reset date filter when switching to agendados view
+                      setDateFilter("todos");
+                      setCustomDate(null);
+                    }
+                  }}
+                  className={`cursor-pointer h-9 px-4 rounded-xl gap-2 w-full sm:w-auto transition-colors ${vistaAgendados ? "shadow-sm bg-blue-600 hover:bg-blue-700 border-blue-600" : "hover:bg-muted"}`}
+                >
+                  <HiOutlineCalendarDays className="h-4 w-4" />
+                  {vistaAgendados ? "✓ Mostrando Agendados" : "Ver todos los Agendados"}
+                </Button>
+                {vistaAgendados && (
+                  <p className="text-xs text-muted-foreground">
+                    Muestra todos los leads agendados, agrupados por día en que se agendaron. Ignora el filtro de fecha de creación.
+                  </p>
+                )}
+              </div>
+
               {/* Ordenamiento */}
               <div className="space-y-4">
                 <label className="text-sm font-semibold text-foreground/90 uppercase tracking-wider flex items-center gap-2">
@@ -750,38 +906,203 @@ export default function LeadsPage() {
           </SheetContent>
         </Sheet>
       </div>
+      </div>
 
-      {/* Barra de acciones en masa */}
-      {selectMode && selected.size > 0 && (
-        <Card className="animate-blur-in-scale">
-          <CardContent className="space-y-3 py-3 px-4">
-            <div className="flex flex-wrap items-center gap-3">
-              <Badge variant="secondary" className="text-sm">
+      {/* Barra de acciones en masa — fija y compacta */}
+      {selectMode && selected.size > 0 && typeof window !== "undefined" && createPortal(
+        <div className="fixed bottom-3 left-1/2 md:left-[calc(50%+8rem)] z-40 w-[min(96vw,1100px)] md:w-[min(calc(100vw-18rem),1100px)] -translate-x-1/2 rounded-2xl border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/85 shadow-[0_10px_30px_rgba(0,0,0,0.14)] animate-in slide-in-from-bottom-2 duration-200">
+          <div className="px-3 py-2.5 space-y-2">
+            <div className="grid grid-cols-[auto_1fr_auto] items-center gap-2">
+              <Badge variant="secondary" className="text-sm shrink-0 justify-self-start">
                 {selected.size} seleccionado(s)
               </Badge>
 
               {/* Acciones rápidas */}
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={isPending}
-                  onClick={() => handleBulkQuickAction("whatsapp", "FUP enviado")}
-                  className="cursor-pointer h-8 text-xs"
-                >
-                  <HiOutlineChatBubbleLeftRight className="mr-1 h-3.5 w-3.5" />
-                  FUP
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={isPending}
-                  onClick={() => handleBulkQuickAction("calendario_enviado", "Calendario enviado")}
-                  className="cursor-pointer h-8 text-xs"
-                >
-                  <HiOutlinePaperAirplane className="mr-1 h-3.5 w-3.5" />
-                  Calendario
-                </Button>
+              <div className="overflow-x-auto">
+                <div className="flex min-w-max items-center gap-1.5 pr-1">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={isPending}
+                    onClick={() => handleBulkQuickAction("llamada", "Llamada realizada")}
+                    className="cursor-pointer h-8 text-xs"
+                  >
+                    <HiOutlinePhone className="mr-1 h-3.5 w-3.5" />
+                    Llamada
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={isPending}
+                    onClick={() => handleBulkQuickAction("whatsapp", "WhatsApp enviado")}
+                    className="cursor-pointer h-8 text-xs"
+                  >
+                    <HiOutlineChatBubbleLeftRight className="mr-1 h-3.5 w-3.5" />
+                    WhatsApp
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={isPending}
+                    onClick={() => handleBulkQuickAction("calendario_enviado", "Calendario enviado")}
+                    className="cursor-pointer h-8 text-xs"
+                  >
+                    <HiOutlinePaperAirplane className="mr-1 h-3.5 w-3.5" />
+                    Cal
+                  </Button>
+                  <Popover open={seguimientoPickerOpen} onOpenChange={setSeguimientoPickerOpen}>
+                    <PopoverTrigger
+                      render={
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={isPending}
+                          className="cursor-pointer h-8 text-xs"
+                        />
+                      }
+                    >
+                      <HiOutlineClock className="mr-1 h-3.5 w-3.5" />
+                      Seguimiento
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" side="top">
+                      <Calendar
+                        mode="single"
+                        onSelect={(day) => { if (day) handleBulkSeguimiento(day); }}
+                        disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
+                        defaultMonth={new Date()}
+                      />
+                    </PopoverContent>
+                  </Popover>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={isPending}
+                    onClick={() => handleBulkEstadoQuick("agendó", "Agendó")}
+                    className="cursor-pointer h-8 text-xs"
+                  >
+                    <HiOutlineCalendarDays className="mr-1 h-3.5 w-3.5" />
+                    Agendó
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={isPending}
+                    onClick={handleBulkDesagendar}
+                    className="cursor-pointer h-8 text-xs text-orange-600 border-orange-200 hover:bg-orange-50"
+                  >
+                    <HiOutlineArrowUturnLeft className="mr-1 h-3.5 w-3.5" />
+                    Desagendar
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={isPending}
+                    onClick={() => handleBulkEstadoQuick("pagó", "Pagó")}
+                    className="cursor-pointer h-8 text-xs text-green-600 border-green-200 hover:bg-green-50"
+                  >
+                    <HiOutlineBanknotes className="mr-1 h-3.5 w-3.5" />
+                    Pagó
+                  </Button>
+                </div>
+              </div>
+
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={exitSelectMode}
+                className="cursor-pointer h-8 w-8 shrink-0 px-0"
+                title="Cerrar selección"
+                aria-label="Cerrar selección"
+              >
+                <HiOutlineXMark className="h-4 w-4" />
+              </Button>
+            </div>
+
+            <div className="overflow-x-auto">
+              <div className="flex min-w-max items-center gap-2 pr-1">
+                <Select onValueChange={handleBulkEstado}>
+                  <SelectTrigger className="w-36 h-8 cursor-pointer text-xs">
+                    <div className="flex items-center gap-1">
+                      <HiOutlineArrowPath className="h-3.5 w-3.5" />
+                      <span>Cambiar estado</span>
+                    </div>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {estadoOptions.map((e) => (
+                      <SelectItem key={e.value} value={e.value} className="cursor-pointer">
+                        {e.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                {closers && closers.length > 0 && (
+                  <Select onValueChange={handleBulkCloser}>
+                    <SelectTrigger className="w-40 h-8 cursor-pointer text-xs">
+                      <div className="flex items-center gap-1">
+                        <HiOutlineUserCircle className="h-3.5 w-3.5" />
+                        <span>Asignar closer</span>
+                      </div>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {closers.map((c) => (
+                        <SelectItem key={c.id} value={c.id} className="cursor-pointer">
+                          {c.full_name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+
+                <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
+                  <PopoverTrigger
+                    render={
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={isPending}
+                        className="cursor-pointer h-8 text-xs"
+                      />
+                    }
+                  >
+                    <HiOutlineCalendarDays className="mr-1 h-3.5 w-3.5" />
+                    <span>Cambiar fecha</span>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" side="top">
+                    <Calendar
+                      mode="single"
+                      onSelect={(day) => { if (day) handleBulkDate(day); }}
+                      defaultMonth={new Date()}
+                    />
+                  </PopoverContent>
+                </Popover>
+
+                <Popover open={agendadoPickerOpen} onOpenChange={setAgendadoPickerOpen}>
+                  <PopoverTrigger
+                    render={
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={isPending}
+                        className="cursor-pointer h-8 text-xs text-orange-600 border-orange-200 hover:bg-orange-50"
+                      />
+                    }
+                  >
+                    <HiOutlineCalendarDays className="mr-1 h-3.5 w-3.5" />
+                    <span>Fecha agendado</span>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" side="top">
+                    <div className="p-2 text-xs text-muted-foreground border-b">
+                      Cambiar cuándo se agendó (para Vista Agendados)
+                    </div>
+                    <Calendar
+                      mode="single"
+                      onSelect={(day) => { if (day) handleBulkAgendadoDate(day); }}
+                      defaultMonth={new Date()}
+                    />
+                  </PopoverContent>
+                </Popover>
+
                 <Button
                   variant="outline"
                   size="sm"
@@ -790,152 +1111,26 @@ export default function LeadsPage() {
                   className="cursor-pointer h-8 text-xs text-indigo-600 border-indigo-200 hover:bg-indigo-50"
                 >
                   <HiOutlineClipboardDocumentCheck className="mr-1 h-3.5 w-3.5" />
-                  FUP Mañana
+                  FUP mañana
                 </Button>
-                <Popover open={fupPickerOpen} onOpenChange={setFupPickerOpen}>
-                  <PopoverTrigger
-                    render={
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={isPending}
-                        className="cursor-pointer h-8 text-xs"
-                      />
-                    }
-                  >
-                    <HiOutlineClipboardDocumentCheck className="mr-1 h-3.5 w-3.5" />
-                    Programar FUP
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0">
-                    <Calendar
-                      mode="single"
-                      onSelect={(day) => { if (day) handleBulkFupDate(day); }}
-                      disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
-                      defaultMonth={new Date()}
-                    />
-                  </PopoverContent>
-                </Popover>
-                <Popover open={seguimientoPickerOpen} onOpenChange={setSeguimientoPickerOpen}>
-                  <PopoverTrigger
-                    render={
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={isPending}
-                        className="cursor-pointer h-8 text-xs"
-                      />
-                    }
-                  >
-                    <HiOutlineClock className="mr-1 h-3.5 w-3.5" />
-                    Seguimiento
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0">
-                    <Calendar
-                      mode="single"
-                      onSelect={(day) => { if (day) handleBulkSeguimiento(day); }}
-                      disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
-                      defaultMonth={new Date()}
-                    />
-                  </PopoverContent>
-                </Popover>
                 <Button
-                  variant="outline"
+                  variant="destructive"
                   size="sm"
+                  onClick={handleBulkDelete}
                   disabled={isPending}
-                  onClick={() => handleBulkEstadoQuick("seguimiento", "Agendó")}
                   className="cursor-pointer h-8 text-xs"
                 >
-                  <HiOutlineCalendarDays className="mr-1 h-3.5 w-3.5" />
-                  Agendó
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={isPending}
-                  onClick={() => handleBulkEstadoQuick("pagó", "Pagó")}
-                  className="cursor-pointer h-8 text-xs text-green-600 border-green-200 hover:bg-green-50"
-                >
-                  <HiOutlineBanknotes className="mr-1 h-3.5 w-3.5" />
-                  Pagó
+                  <HiOutlineTrash className="mr-1 h-3.5 w-3.5" />
+                  Eliminar
                 </Button>
               </div>
             </div>
-
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <Select onValueChange={handleBulkEstado}>
-                <SelectTrigger className="w-full sm:w-40 h-9 cursor-pointer shadow-sm">
-                  <div className="flex items-center gap-1">
-                    <HiOutlineArrowPath className="h-4 w-4" />
-                    <span>Cambiar estado</span>
-                  </div>
-                </SelectTrigger>
-                <SelectContent>
-                  {estadoOptions.map((e) => (
-                    <SelectItem key={e.value} value={e.value} className="cursor-pointer">
-                      {e.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              {closers && closers.length > 0 && (
-                <Select onValueChange={handleBulkCloser}>
-                  <SelectTrigger className="w-full sm:w-44 h-9 cursor-pointer shadow-sm">
-                    <div className="flex items-center gap-1">
-                      <HiOutlineUserCircle className="h-4 w-4" />
-                      <span>Asignar closer</span>
-                    </div>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {closers.map((c) => (
-                      <SelectItem key={c.id} value={c.id} className="cursor-pointer">
-                        {c.full_name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-
-              <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
-                <PopoverTrigger
-                  render={
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={isPending}
-                      className="cursor-pointer h-9 shadow-sm"
-                    />
-                  }
-                >
-                  <HiOutlineCalendarDays className="mr-1 h-4 w-4" />
-                  <span>Cambiar fecha</span>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0">
-                  <Calendar
-                    mode="single"
-                    onSelect={(day) => {
-                      if (day) handleBulkDate(day);
-                    }}
-                    defaultMonth={new Date()}
-                  />
-                </PopoverContent>
-              </Popover>
-
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={handleBulkDelete}
-                disabled={isPending}
-                className="cursor-pointer ml-auto"
-              >
-                <HiOutlineTrash className="mr-1 h-4 w-4" />
-                Eliminar
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>,
+        document.body
       )}
-
+      {/* Spacer so sticky bottom bar doesn't overlap last card */}
+      <div style={{ paddingBottom: selectMode && selected.size > 0 ? "8rem" : 0 }} />
       {/* Lista de leads — virtualizada */}
       {isListLoading ? (
         <div className="flex flex-col items-center justify-center py-20 gap-3 text-muted-foreground">
@@ -1033,6 +1228,7 @@ export default function LeadsPage() {
                         onToggle={toggleSelect}
                         onTogglePin={handleTogglePin}
                         lastNote={interactionsMap?.get(item.lead.id)}
+                        onAction={handleCardAction}
                       />
                     </div>
                   )}
@@ -1052,6 +1248,50 @@ export default function LeadsPage() {
           )}
         </div>
       )}
+
+      {/* Per-card date picker dialog */}
+      <Dialog
+        open={!!cardDatePicker}
+        onOpenChange={(open) => {
+          if (!open) setCardDatePicker(null);
+        }}
+      >
+        <DialogContent className="w-auto max-w-sm p-0 overflow-hidden" showCloseButton={false}>
+          <DialogHeader className="px-4 pt-4 pb-2">
+            <DialogTitle className="text-center">
+              {cardDatePicker?.type === "crm" ? "Cambiar fecha de CRM" : "Cambiar fecha de agenda"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="px-4 pb-4">
+            <Calendar
+              mode="single"
+              onSelect={(date) => {
+                if (!date || !cardDatePicker) return;
+                if (cardDatePicker.type === "crm") {
+                  updateLead.mutate(
+                    { id: cardDatePicker.leadId, created_at: date.toISOString() },
+                    { onSuccess: () => toast.success("Fecha de CRM actualizada") }
+                  );
+                } else {
+                  updateLead.mutate(
+                    { id: cardDatePicker.leadId, fecha_call_set_at: date.toISOString() },
+                    { onSuccess: () => toast.success("Fecha de agenda actualizada") }
+                  );
+                }
+                setCardDatePicker(null);
+              }}
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              className="cursor-pointer mt-3 w-full"
+              onClick={() => setCardDatePicker(null)}
+            >
+              Cancelar
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

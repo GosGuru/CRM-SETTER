@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import ExcelJS from "exceljs";
 
 const CASH_PER_AGENDA = 32;
+const DEFAULT_EXPORT_TIMEZONE = "America/Argentina/Buenos_Aires";
 
 const MONTH_NAMES_ES: Record<number, string> = {
   1: "Enero", 2: "Febrero", 3: "Marzo", 4: "Abril",
@@ -10,10 +11,35 @@ const MONTH_NAMES_ES: Record<number, string> = {
   9: "Septiembre", 10: "Octubre", 11: "Noviembre", 12: "Diciembre",
 };
 
+function resolveExportTimeZone(rawTz: string | null): string {
+  if (!rawTz) return DEFAULT_EXPORT_TIMEZONE;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: rawTz });
+    return rawTz;
+  } catch {
+    return DEFAULT_EXPORT_TIMEZONE;
+  }
+}
+
+function toDateKeyInTimeZone(isoValue: string, timeZone: string): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date(isoValue));
+
+  const year = parts.find((p) => p.type === "year")?.value ?? "0000";
+  const month = parts.find((p) => p.type === "month")?.value ?? "01";
+  const day = parts.find((p) => p.type === "day")?.value ?? "01";
+  return `${year}-${month}-${day}`;
+}
+
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl;
   const monthParam = searchParams.get("month");
   const yearParam = searchParams.get("year");
+  const tzParam = searchParams.get("tz");
 
   const now = new Date();
   const month = monthParam ? parseInt(monthParam, 10) : now.getMonth() + 1;
@@ -25,13 +51,22 @@ export async function GET(req: NextRequest) {
 
   const supabase = await createClient();
 
-  // Build date range for the whole month
+  // Build date range:
+  // - Current month/year: from day 1 to today (month-to-date)
+  // - Any other month/year: full month
   const firstDay = `${year}-${String(month).padStart(2, "0")}-01`;
   const lastDayDate = new Date(year, month, 0); // day 0 of next month = last day of this month
-  const lastDay = `${year}-${String(month).padStart(2, "0")}-${String(lastDayDate.getDate()).padStart(2, "0")}`;
+  const isCurrentMonth = year === now.getFullYear() && month === now.getMonth() + 1;
+  const lastDayNumber = isCurrentMonth
+    ? Math.min(now.getDate(), lastDayDate.getDate())
+    : lastDayDate.getDate();
+  const lastDay = `${year}-${String(month).padStart(2, "0")}-${String(lastDayNumber).padStart(2, "0")}`;
+  const exportTimeZone = resolveExportTimeZone(tzParam);
 
-  const rangeStart = `${firstDay}T00:00:00`;
-  const rangeEnd = `${lastDay}T23:59:59`;
+  // Add a 1-day safety margin because grouping is done in the selected timezone.
+  // This avoids cutting records near UTC day boundaries.
+  const rangeStart = new Date(Date.UTC(year, month - 1, 1, 0, 0, 0, 0) - 24 * 60 * 60 * 1000).toISOString();
+  const rangeEnd = new Date(Date.UTC(year, month - 1, lastDayNumber, 23, 59, 59, 999) + 24 * 60 * 60 * 1000).toISOString();
 
   // Fetch all data for the month in parallel
   const [
@@ -64,6 +99,38 @@ export async function GET(req: NextRequest) {
       .lte("fecha_call_set_at", rangeEnd),
   ]);
 
+  const inboundByDay = new Map<string, number>();
+  for (const lead of leads ?? []) {
+    const key = toDateKeyInTimeZone((lead as { created_at: string }).created_at, exportTimeZone);
+    if (key >= firstDay && key <= lastDay) {
+      inboundByDay.set(key, (inboundByDay.get(key) ?? 0) + 1);
+    }
+  }
+
+  const calByDay = new Map<string, number>();
+  for (const interaction of interactions ?? []) {
+    const key = toDateKeyInTimeZone((interaction as { created_at: string }).created_at, exportTimeZone);
+    if (key >= firstDay && key <= lastDay) {
+      calByDay.set(key, (calByDay.get(key) ?? 0) + 1);
+    }
+  }
+
+  const callsByDay = new Map<string, number>();
+  for (const agendaLead of agendaLeads ?? []) {
+    const key = toDateKeyInTimeZone((agendaLead as { fecha_call_set_at: string }).fecha_call_set_at, exportTimeZone);
+    if (key >= firstDay && key <= lastDay) {
+      callsByDay.set(key, (callsByDay.get(key) ?? 0) + 1);
+    }
+  }
+
+  const fupsByDay = new Map<string, number>();
+  for (const followup of followupsData ?? []) {
+    const key = (followup as { fecha_programada: string }).fecha_programada;
+    if (key >= firstDay && key <= lastDay) {
+      fupsByDay.set(key, (fupsByDay.get(key) ?? 0) + 1);
+    }
+  }
+
   // Build daily rows
   const rows: {
     fecha: string;
@@ -76,28 +143,13 @@ export async function GET(req: NextRequest) {
     cash: number;
   }[] = [];
 
-  const totalDays = lastDayDate.getDate();
+  const totalDays = lastDayNumber;
   for (let d = 1; d <= totalDays; d++) {
     const dateStr = `${year}-${String(month).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-    const dayStart = `${dateStr}T00:00:00`;
-    const dayEnd = `${dateStr}T23:59:59`;
-
-    const inbound = (leads ?? []).filter(
-      (l: { created_at: string }) => l.created_at >= dayStart && l.created_at <= dayEnd
-    ).length;
-
-    const fups = (followupsData ?? []).filter(
-      (f: { fecha_programada: string }) => f.fecha_programada === dateStr
-    ).length;
-
-    const cal = (interactions ?? []).filter(
-      (i: { created_at: string }) => i.created_at >= dayStart && i.created_at <= dayEnd
-    ).length;
-
-    const calls = (agendaLeads ?? []).filter(
-      (l: { fecha_call_set_at: string }) =>
-        l.fecha_call_set_at >= dayStart && l.fecha_call_set_at <= dayEnd
-    ).length;
+    const inbound = inboundByDay.get(dateStr) ?? 0;
+    const fups = fupsByDay.get(dateStr) ?? 0;
+    const cal = calByDay.get(dateStr) ?? 0;
+    const calls = callsByDay.get(dateStr) ?? 0;
 
     const tasa = inbound > 0 ? `${((calls / inbound) * 100).toFixed(2)}%` : "0.00%";
     const cash = calls * CASH_PER_AGENDA;
@@ -190,7 +242,6 @@ export async function GET(req: NextRequest) {
   // ---- Data rows ----
   rows.forEach((row, idx) => {
     const excelRow = idx + 5; // data starts at row 5
-    const isLast = idx === rows.length - 1;
 
     const fechaCell = ws.getCell(`A${excelRow}`);
     fechaCell.value = row.fecha;
@@ -198,7 +249,7 @@ export async function GET(req: NextRequest) {
     fechaCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFF2CC" } };
     fechaCell.alignment = { vertical: "middle", horizontal: "center" };
     fechaCell.border = {
-      bottom: isLast ? { style: "medium" } : { style: "thin" },
+      bottom: { style: "thin" },
       right: { style: "medium" },
     };
 
@@ -208,7 +259,7 @@ export async function GET(req: NextRequest) {
       fill: { type: "pattern" as const, pattern: "solid" as const, fgColor: { argb: "FFFFFFFF" } },
       alignment: { vertical: "middle" as const, horizontal: (center ? "center" : "left") as ExcelJS.Alignment["horizontal"], wrapText: true },
       border: {
-        bottom: isLast ? { style: "medium" as const } : { style: "thin" as const },
+        bottom: { style: "thin" as const },
         right: { style: "medium" as const },
       },
     });
@@ -236,6 +287,46 @@ export async function GET(req: NextRequest) {
 
     ws.getRow(excelRow).height = 20;
   });
+
+  // ---- Totals row (month aggregate) ----
+  const totals = rows.reduce(
+    (acc, row) => ({
+      inbound: acc.inbound + row.inbound,
+      fups: acc.fups + row.fups,
+      cal: acc.cal + row.cal,
+      calls: acc.calls + row.calls,
+      cash: acc.cash + row.cash,
+    }),
+    { inbound: 0, fups: 0, cal: 0, calls: 0, cash: 0 }
+  );
+  const totalTasa = totals.inbound > 0 ? `${((totals.calls / totals.inbound) * 100).toFixed(2)}%` : "0.00%";
+  const totalRowNumber = rows.length + 5;
+  const totalCols: [string, string | number][] = [
+    ["A", "TOTAL MES"],
+    ["B", MONTH_NAMES_ES[month]],
+    ["C", ""],
+    ["D", totals.inbound],
+    ["E", totals.fups],
+    ["F", totals.cal],
+    ["G", totals.calls],
+    ["H", totalTasa],
+    ["I", totals.cash === 0 ? "" : `$${totals.cash}`],
+  ];
+
+  for (const [col, value] of totalCols) {
+    const cell = ws.getCell(`${col}${totalRowNumber}`);
+    cell.value = value;
+    cell.font = { name: "Arial", size: 10, bold: true, color: { argb: "FF000000" } };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFE8B6" } };
+    cell.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
+    cell.border = {
+      top: { style: "medium" },
+      bottom: { style: "medium" },
+      right: { style: col === "I" ? "medium" : "thin" },
+      left: col === "A" ? { style: "medium" } : { style: "thin" },
+    };
+  }
+  ws.getRow(totalRowNumber).height = 22;
 
   // ---- Freeze top 4 rows for scrolling ----
   ws.views = [{ state: "frozen", xSplit: 0, ySplit: 4 }];

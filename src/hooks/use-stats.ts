@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
-import { localDateStr } from "@/lib/utils";
+import { localDateStr, localDayBoundsISO } from "@/lib/utils";
 import type { DailyKPI, KPIDetailType, Lead, AppSettings } from "@/types/database";
 
 let _supabase: ReturnType<typeof createClient>;
@@ -56,8 +56,7 @@ export function useStats(fecha: string) {
   return useQuery({
     queryKey: ["stats", fecha],
     queryFn: async () => {
-      const startOfDay = `${fecha}T00:00:00`;
-      const endOfDay = `${fecha}T23:59:59`;
+      const { start: startOfDay, end: endOfDay } = localDayBoundsISO(fecha);
 
       const [
         settings,
@@ -93,7 +92,7 @@ export function useStats(fecha: string) {
         getSupabase()
           .from("leads")
           .select("*", { count: "exact", head: true })
-          .in("estado", ["nuevo", "seguimiento"]),
+          .in("estado", ["nuevo", "agendó"]),
         getSupabase()
           .from("leads")
           .select("monto_programa")
@@ -136,8 +135,8 @@ export function useKPIHistory(days = 7) {
         dates.push(localDateStr(d));
       }
 
-      const rangeStart = `${dates[0]}T00:00:00`;
-      const rangeEnd = `${dates[dates.length - 1]}T23:59:59`;
+      const rangeStart = localDayBoundsISO(dates[0]).start;
+      const rangeEnd = localDayBoundsISO(dates[dates.length - 1]).end;
 
       const [
         settings,
@@ -180,8 +179,7 @@ export function useKPIHistory(days = 7) {
       ]);
 
       return dates.map((fecha) => {
-        const dayStart = `${fecha}T00:00:00`;
-        const dayEnd = `${fecha}T23:59:59`;
+        const { start: dayStart, end: dayEnd } = localDayBoundsISO(fecha);
 
         const inbound = (leads ?? []).filter(
           (l: { created_at: string }) =>
@@ -238,8 +236,7 @@ export function useKPIDetail(fecha: string, tipo: KPIDetailType | null) {
     queryKey: ["kpi-detail", fecha, tipo],
     enabled: !!tipo,
     queryFn: async () => {
-      const startOfDay = `${fecha}T00:00:00`;
-      const endOfDay = `${fecha}T23:59:59`;
+      const { start: startOfDay, end: endOfDay } = localDayBoundsISO(fecha);
 
       if (tipo === "inbound") {
         const { data, error } = await getSupabase()

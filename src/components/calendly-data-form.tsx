@@ -7,13 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { CloserCombobox } from "@/components/closer-combobox";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -63,6 +57,8 @@ export function CalendlyDataForm({ lead }: { lead: Lead }) {
       ? `${String(new Date(lead.fecha_call).getHours()).padStart(2, "0")}:${String(new Date(lead.fecha_call).getMinutes()).padStart(2, "0")}`
       : "10:00",
     closer_id: lead.closer_id ?? "",
+    // Text shown in the closer input — free text or matched closer name
+    closer_input: lead.closer_nombre ?? (lead.closer?.full_name ?? ""),
     respuestas: lead.respuestas ?? "",
   });
   const [calOpen, setCalOpen] = useState(false);
@@ -74,7 +70,8 @@ export function CalendlyDataForm({ lead }: { lead: Lead }) {
   };
 
   const buildPlantilla = () => {
-    const closerName = closers?.find((c) => c.id === form.closer_id)?.full_name ?? "";
+    // Use the free-text input directly for display
+    const closerName = form.closer_input || "—";
     const fechaStr = form.fecha_call
       ? formatFechaCall(form.fecha_call, form.hora_call)
       : "Sin agendar";
@@ -93,12 +90,44 @@ export function CalendlyDataForm({ lead }: { lead: Lead }) {
     return lines.join("\n");
   };
 
-  const handleCopy = async () => {
-    const text = buildPlantilla();
-    await navigator.clipboard.writeText(text);
-    setCopied(true);
-    toast.success("Plantilla copiada al portapapeles");
-    setTimeout(() => setCopied(false), 2000);
+  // Shared save logic (used by both Guardar and Guardar y Copiar)
+  const buildSavePayload = () => {
+    const [hh, mm] = form.hora_call.split(":").map(Number);
+    const fechaFinal = new Date(form.fecha_call!);
+    fechaFinal.setHours(hh, mm, 0, 0);
+    const hasMatchedId = !!form.closer_id;
+    return {
+      id: lead.id,
+      nombre_real: form.nombre_real.trim() || null,
+      apellido: form.apellido.trim() || null,
+      celular: form.celular.trim() || null,
+      email: form.email.trim() || null,
+      edad: form.edad ? Number(form.edad) : null,
+      trabajo: form.trabajo.trim() || null,
+      fecha_call: fechaFinal.toISOString(),
+      fecha_call_set_at: new Date().toISOString(),
+      closer_id: hasMatchedId ? form.closer_id : null,
+      closer_nombre: !hasMatchedId && form.closer_input.trim() ? form.closer_input.trim() : null,
+      respuestas: form.respuestas.trim() || null,
+      estado: "agendó" as const,
+    };
+  };
+
+  const handleCopy = () => {
+    if (!form.fecha_call) {
+      toast.error("La fecha y hora del call es obligatoria");
+      return;
+    }
+    updateLead.mutate(buildSavePayload(), {
+      onSuccess: async () => {
+        const text = buildPlantilla();
+        await navigator.clipboard.writeText(text);
+        setCopied(true);
+        toast.success("Guardado y copiado al portapapeles ✓");
+        setTimeout(() => setCopied(false), 2000);
+      },
+      onError: () => toast.error("Error al guardar los datos"),
+    });
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -109,34 +138,10 @@ export function CalendlyDataForm({ lead }: { lead: Lead }) {
       return;
     }
 
-    const [hh, mm] = form.hora_call.split(":").map(Number);
-    const fechaFinal = new Date(form.fecha_call);
-    fechaFinal.setHours(hh, mm, 0, 0);
-
-    updateLead.mutate(
-      {
-        id: lead.id,
-        nombre_real: form.nombre_real.trim() || null,
-        apellido: form.apellido.trim() || null,
-        celular: form.celular.trim() || null,
-        email: form.email.trim() || null,
-        edad: form.edad ? Number(form.edad) : null,
-        trabajo: form.trabajo.trim() || null,
-        fecha_call: fechaFinal.toISOString(),
-        fecha_call_set_at: new Date().toISOString(),
-        closer_id: form.closer_id || null,
-        respuestas: form.respuestas.trim() || null,
-        estado: "seguimiento",
-      },
-      {
-        onSuccess: () => {
-          toast.success("Datos guardados — lead pasado a seguimiento");
-        },
-        onError: () => {
-          toast.error("Error al guardar los datos");
-        },
-      }
-    );
+    updateLead.mutate(buildSavePayload(), {
+      onSuccess: () => toast.success("Datos guardados — lead agendado ✓"),
+      onError: () => toast.error("Error al guardar los datos"),
+    });
   };
 
   return (
@@ -238,21 +243,14 @@ export function CalendlyDataForm({ lead }: { lead: Lead }) {
             <Label className="text-xs font-medium flex items-center gap-1">
               <HiOutlineUserGroup className="h-3 w-3" /> Closer
             </Label>
-            <Select
-              value={form.closer_id}
-              onValueChange={(v) => setForm((prev) => ({ ...prev, closer_id: v ?? "" }))}
-            >
-              <SelectTrigger className="w-full cursor-pointer h-9 text-sm">
-                <SelectValue placeholder="Asignar closer" />
-              </SelectTrigger>
-              <SelectContent>
-                {closers?.map((c) => (
-                  <SelectItem key={c.id} value={c.id} className="cursor-pointer">
-                    {c.full_name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <CloserCombobox
+              closers={closers}
+              value={form.closer_input}
+              onValueChange={(text, id) =>
+                setForm((prev) => ({ ...prev, closer_input: text, closer_id: id ?? "" }))
+              }
+              placeholder="Nombre del closer (libre o existente)"
+            />
           </div>
 
           {/* Contacto + Correo */}
@@ -312,12 +310,13 @@ export function CalendlyDataForm({ lead }: { lead: Lead }) {
               variant="outline"
               className="cursor-pointer h-10"
               onClick={handleCopy}
+              disabled={updateLead.isPending}
             >
               {copied
                 ? <HiOutlineCheck className="mr-1.5 h-4 w-4 text-green-600 shrink-0" />
                 : <HiOutlineClipboardDocument className="mr-1.5 h-4 w-4 shrink-0" />
               }
-              {copied ? "¡Copiado!" : "Copiar"}
+              {copied ? "¡Copiado!" : "Guardar y Copiar"}
             </Button>
             <Button
               type="submit"

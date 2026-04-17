@@ -10,6 +10,7 @@ import { useClosers, useCurrentUser } from "@/hooks/use-users";
 import { PreCallSheet } from "@/components/pre-call-sheet";
 import { ScheduleFupDialog } from "@/components/schedule-fup-dialog";
 
+import { CloserCombobox } from "@/components/closer-combobox";
 import { CalendlyDataForm } from "@/components/calendly-data-form";
 import { StatusBadge } from "@/components/status-badge";
 import { PaymentSection } from "@/components/payment-section";
@@ -43,13 +44,15 @@ import {
   HiOutlineTrash,
   HiOutlineBoltSlash,
   HiOutlineBolt,
+  HiOutlineArrowUturnLeft,
+  HiOutlineCurrencyDollar,
 } from "react-icons/hi2";
 import Link from "next/link";
 import type { LeadEstado, InteractionTipo } from "@/types/database";
 
 const estados: { value: LeadEstado; label: string }[] = [
   { value: "nuevo", label: "Nuevo" },
-  { value: "seguimiento", label: "Seguimiento" },
+  { value: "agendó", label: "Agendado" },
   { value: "cerrado", label: "Cerrado" },
   { value: "pagó", label: "Pagó" },
 ];
@@ -83,11 +86,13 @@ export default function LeadDetailPage({
   const [fupDefaultDate, setFupDefaultDate] = useState<string | undefined>();
   const [nombreReal, setNombreReal] = useState("");
   const [apellido, setApellido] = useState("");
+  const [closerInput, setCloserInput] = useState("");
 
   useEffect(() => {
     if (lead) {
       setNombreReal(lead.nombre_real ?? "");
       setApellido(lead.apellido ?? "");
+      setCloserInput(lead.closer_nombre ?? lead.closer?.full_name ?? "");
     }
   }, [lead?.id]);
 
@@ -111,7 +116,7 @@ export default function LeadDetailPage({
       date.getFullYear(), date.getMonth(), date.getDate(), 12, 0, 0
     ).toISOString();
     updateLead.mutate(
-      { id: lead.id, estado: "seguimiento", fecha_call: fechaCall, fecha_call_set_at: new Date().toISOString() },
+      { id: lead.id, estado: "agendó", fecha_call: fechaCall, fecha_call_set_at: new Date().toISOString() },
       {
         onSuccess: () => {
           createInteraction.mutate({
@@ -168,13 +173,37 @@ export default function LeadDetailPage({
     );
   };
 
-  const handleCloserChange = (closerId: string | null) => {
-    if (!lead || !closerId) return;
+  const handleCloserChange = (text: string, id: string | null) => {
+    if (!lead) return;
+    setCloserInput(text);
     updateLead.mutate(
-      { id: lead.id, closer_id: closerId },
+      {
+        id: lead.id,
+        closer_id: id ?? null,
+        closer_nombre: !id && text.trim() ? text.trim() : null,
+      },
       {
         onSuccess: () => toast.success("Closer asignado"),
         onError: (err) => toast.error(`No se pudo asignar: ${err instanceof Error ? err.message : "error"}`),
+      }
+    );
+  };
+
+  const handleCancelarSeguimiento = () => {
+    if (!lead || !currentUser) return;
+    updateLead.mutate(
+      { id: lead.id, estado: "nuevo", fecha_call_set_at: null },
+      {
+        onSuccess: () => {
+          createInteraction.mutate({
+            lead_id: lead.id,
+            user_id: currentUser.id,
+            tipo: "cambio_estado",
+            contenido: "Volvió a Nuevo — desagendado",
+          });
+          toast.success("Lead desagendado y vuelto a Nuevo");
+        },
+        onError: (err) => toast.error(`Error: ${err instanceof Error ? err.message : "desconocido"}`),
       }
     );
   };
@@ -246,6 +275,18 @@ export default function LeadDetailPage({
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-lg font-semibold leading-tight">{lead.nombre}</span>
           <StatusBadge estado={lead.estado} />
+          {lead.estado === "agendó" && (
+            <button
+              type="button"
+              onClick={handleCancelarSeguimiento}
+              disabled={updateLead.isPending}
+              className="inline-flex items-center gap-1 rounded-full border border-orange-300 bg-orange-50 px-2.5 py-1 text-xs font-medium text-orange-700 hover:bg-orange-100 transition-colors cursor-pointer"
+              title="Cancelar seguimiento y volver a Nuevo"
+            >
+              <HiOutlineArrowUturnLeft className="h-3 w-3" />
+              ↩ Cancelar seguimiento
+            </button>
+          )}
           {leadFups && leadFups.length > 0 && (
             <Badge variant="outline" className="text-xs text-indigo-600 border-indigo-200 bg-indigo-50">
               <HiOutlineClipboardDocumentCheck className="mr-1 h-3 w-3" />
@@ -453,7 +494,7 @@ export default function LeadDetailPage({
                   size="sm"
                   className="cursor-pointer h-11 justify-start"
                   disabled={updateLead.isPending}
-                  onClick={() => handleEstadoChange("seguimiento")}
+                  onClick={() => handleEstadoChange("agendó")}
                 >
                   <HiOutlineCalendarDays className="mr-1.5 h-4 w-4" /> Agendó
                 </Button>
@@ -468,6 +509,34 @@ export default function LeadDetailPage({
                 </Button>
               </CardContent>
             </Card>
+
+            {/* Pago de reunión ($32) — toggle prominente */}
+            <button
+              type="button"
+              disabled={updateLead.isPending}
+              onClick={() =>
+                updateLead.mutate(
+                  { id: lead.id, pago_reunion: !lead.pago_reunion },
+                  {
+                    onSuccess: () =>
+                      toast.success(
+                        lead.pago_reunion
+                          ? "Pago de reunión desmarcado"
+                          : "Pago de reunión registrado ✓"
+                      ),
+                  }
+                )
+              }
+              className={cn(
+                "w-full flex items-center justify-center gap-2.5 rounded-xl px-4 py-3.5 text-sm font-semibold transition-all cursor-pointer border-2",
+                lead.pago_reunion
+                  ? "bg-green-600 border-green-600 text-white shadow-md shadow-green-200"
+                  : "border-2 border-green-400 text-green-700 hover:bg-green-50 bg-white"
+              )}
+            >
+              <HiOutlineCurrencyDollar className="h-5 w-5 shrink-0" />
+              {lead.pago_reunion ? "✓ Pagó reunión ($32)" : "💰 Pagó reunión ($32)"}
+            </button>
 
             {/* Pago del programa */}
             <PaymentSection key={`ps-${lead.id}-${lead.updated_at}`} lead={lead} />
@@ -625,7 +694,7 @@ export default function LeadDetailPage({
                   size="sm"
                   className="cursor-pointer h-11 justify-start"
                   disabled={updateLead.isPending}
-                  onClick={() => handleEstadoChange("seguimiento")}
+                  onClick={() => handleEstadoChange("agendó")}
                 >
                   <HiOutlineCheckCircle className="mr-1.5 h-4 w-4" /> Agendó
                 </Button>
@@ -667,24 +736,43 @@ export default function LeadDetailPage({
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-xs text-muted-foreground font-medium">Closer</label>
-                  <Select
-                    value={lead.closer_id ?? ""}
+                  <CloserCombobox
+                    closers={closers}
+                    value={closerInput}
                     onValueChange={handleCloserChange}
-                  >
-                    <SelectTrigger className="cursor-pointer">
-                      <SelectValue placeholder="Seleccionar closer" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {closers?.map((closer) => (
-                        <SelectItem key={closer.id} value={closer.id} className="cursor-pointer">
-                          {closer.full_name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    placeholder="Nombre del closer (libre o existente)"
+                  />
                 </div>
               </CardContent>
             </Card>
+
+            {/* Pago de reunión ($32) — toggle prominente */}
+            <button
+              type="button"
+              disabled={updateLead.isPending}
+              onClick={() =>
+                updateLead.mutate(
+                  { id: lead.id, pago_reunion: !lead.pago_reunion },
+                  {
+                    onSuccess: () =>
+                      toast.success(
+                        lead.pago_reunion
+                          ? "Pago de reunión desmarcado"
+                          : "Pago de reunión registrado ✓"
+                      ),
+                  }
+                )
+              }
+              className={cn(
+                "w-full flex items-center justify-center gap-2.5 rounded-xl px-4 py-3.5 text-sm font-semibold transition-all cursor-pointer border-2",
+                lead.pago_reunion
+                  ? "bg-green-600 border-green-600 text-white shadow-md shadow-green-200"
+                  : "border-2 border-green-400 text-green-700 hover:bg-green-50 bg-white"
+              )}
+            >
+              <HiOutlineCurrencyDollar className="h-5 w-5 shrink-0" />
+              {lead.pago_reunion ? "✓ Pagó reunión ($32)" : "💰 Pagó reunión ($32)"}
+            </button>
 
             {/* Pago del programa */}
             <PaymentSection key={`ps2-${lead.id}-${lead.updated_at}`} lead={lead} />

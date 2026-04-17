@@ -59,7 +59,17 @@ const MONTH_NAMES: { value: number; label: string }[] = [
   { value: 10, label: "Octubre" }, { value: 11, label: "Noviembre" }, { value: 12, label: "Diciembre" },
 ];
 
-function ExportKPIsButton() {
+function sanitizeFilenamePart(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\w\s-]/g, "")
+    .trim()
+    .replace(/\s+/g, "_")
+    .replace(/_+/g, "_");
+}
+
+function ExportKPIsButton({ profileName }: { profileName?: string | null }) {
   const now = new Date();
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
@@ -68,13 +78,18 @@ function ExportKPIsButton() {
   const handleExport = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/export/kpis?month=${month}&year=${year}`);
+      const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const res = await fetch(
+        `/api/export/kpis?month=${month}&year=${year}&tz=${encodeURIComponent(timeZone)}`
+      );
       if (!res.ok) throw new Error("Error al generar el Excel");
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `KPIs_${MONTH_NAMES.find((m) => m.value === month)?.label}_${year}.xlsx`;
+      const monthLabel = MONTH_NAMES.find((m) => m.value === month)?.label ?? String(month);
+      const safeProfileName = sanitizeFilenamePart(profileName ?? "") || "Perfil";
+      a.download = `${safeProfileName}_KPIs_${monthLabel}_${year}.xlsx`;
       a.click();
       URL.revokeObjectURL(url);
       toast.success("Excel exportado correctamente");
@@ -212,6 +227,8 @@ export default function DashboardPage() {
 
   const fupsCompletados = fups?.filter((f) => f.completado).length ?? 0;
   const fupsTotal = fups?.length ?? 0;
+  const callsSinPagar = followUps?.filter((l) => !l.pago_reunion) ?? [];
+  const callsPagaron = followUps?.filter((l) => l.pago_reunion) ?? [];
 
   const hoy = localDateStr();
   const esHoy = fecha === hoy;
@@ -614,6 +631,20 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
         )}
+
+        {/* Calls del día sin pagar — subsección dentro de FUPs */}
+        {!followUpsLoading && callsSinPagar.length > 0 && (
+          <div className="mt-4">
+            <h3 className="text-sm font-semibold mb-2 flex items-center gap-1.5 text-orange-700">
+              <span>📞</span> Calls del día sin pagar reunión
+            </h3>
+            <div className="space-y-2">
+              {callsSinPagar.map((lead) => (
+                <LeadCard key={lead.id} lead={lead} />
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Calls agendadas */}
@@ -629,10 +660,31 @@ export default function DashboardPage() {
             ))}
           </div>
         ) : followUps && followUps.length > 0 ? (
-          <div className="space-y-2">
-            {followUps.map((lead) => (
-              <LeadCard key={lead.id} lead={lead} />
-            ))}
+          <div className="space-y-4">
+            {callsSinPagar.length > 0 && (
+              <div>
+                <h3 className="text-sm font-semibold mb-2 flex items-center gap-1.5 text-orange-700">
+                  <span>📞</span> Sin pagar reunión
+                </h3>
+                <div className="space-y-2 rounded-xl border-2 border-orange-200 bg-orange-50 p-2">
+                  {callsSinPagar.map((lead) => (
+                    <LeadCard key={lead.id} lead={lead} />
+                  ))}
+                </div>
+              </div>
+            )}
+            {callsPagaron.length > 0 && (
+              <div>
+                <h3 className="text-sm font-semibold mb-2 flex items-center gap-1.5 text-green-700">
+                  <span>✅</span> Pagaron reunión
+                </h3>
+                <div className="space-y-2 rounded-xl border-2 border-green-200 bg-green-50 p-2">
+                  {callsPagaron.map((lead) => (
+                    <LeadCard key={lead.id} lead={lead} />
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         ) : (
           <Card>
@@ -644,7 +696,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Exportar KPIs */}
-      <ExportKPIsButton />
+      <ExportKPIsButton profileName={currentUser?.full_name} />
     </div>
   );
 }

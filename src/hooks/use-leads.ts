@@ -7,17 +7,18 @@ import type { Lead, LeadEstado } from "@/types/database";
 
 export const LEADS_PAGE_SIZE = 50;
 
-export type SortOption = "recientes" | "antiguos" | "az" | "za" | "calificados";
+export type SortOption = "recientes" | "antiguos" | "az" | "za" | "calificados" | "agendados";
 
 export type InfiniteLeadsFilters = {
   filtroEstado?: LeadEstado | "todos";
   search?: string;
   dateFilter?: string;
   sortBy?: SortOption;
+  soloAgendados?: boolean;
 };
 
 const LEAD_LIST_SELECT =
-  "id, nombre, nombre_real, apellido, celular, email, instagram, estado, closer_id, setter_id, fecha_call, fecha_call_set_at, pinned, created_at, updated_at, pago_programa, plan_pago, monto_programa, fecha_pago, respuestas, objetivo, edad, trabajo, decisor, inversion_ok, compromiso, cliente_potencial, califica_economicamente, closer:users!leads_closer_id_fkey(id,full_name), setter:users!leads_setter_id_fkey(id,full_name)";
+  "id, nombre, nombre_real, apellido, celular, email, instagram, estado, closer_id, closer_nombre, setter_id, fecha_call, fecha_call_set_at, pinned, created_at, updated_at, pago_programa, pago_reunion, plan_pago, monto_programa, fecha_pago, respuestas, objetivo, edad, trabajo, decisor, inversion_ok, compromiso, cliente_potencial, califica_economicamente, closer:users!leads_closer_id_fkey(id,full_name), setter:users!leads_setter_id_fkey(id,full_name)";
 
 function normalizeStoredName(value: string): string {
   return value.replace(/\s+/g, " ").trim();
@@ -56,6 +57,11 @@ export function useInfiniteLeads(filters: InfiniteLeadsFilters) {
       // Estado filter
       if (filters.filtroEstado && filters.filtroEstado !== "todos") {
         query = query.eq("estado", filters.filtroEstado);
+      }
+
+      // Agendados filter — show all leads with estado agendó/seguimiento (pre-migration)
+      if (filters.soloAgendados) {
+        query = query.in("estado", ["agendó", "seguimiento"]);
       }
 
       // Search filter — server-side ilike on nombre, nombre_real, apellido
@@ -104,6 +110,8 @@ export function useInfiniteLeads(filters: InfiniteLeadsFilters) {
         query = query
           .order("pinned", { ascending: true })
           .order("created_at", { ascending: true });
+      } else if (sortBy === "agendados") {
+        query = query.order("fecha_call_set_at", { ascending: false, nullsFirst: false });
       } else {
         // recientes + calificados both fetch newest first
         query = query
@@ -177,13 +185,12 @@ export function useFollowUps(fecha: string) {
   return useQuery({
     queryKey: ["followups", fecha],
     queryFn: async () => {
-      const startOfDay = `${fecha}T00:00:00`;
-      const endOfDay = `${fecha}T23:59:59`;
+      const { start: startOfDay, end: endOfDay } = localDayBoundsISO(fecha);
 
       const { data, error } = await getSupabase()
         .from("leads")
         .select("*, closer:users!leads_closer_id_fkey(*)")
-        .eq("estado", "seguimiento")
+        .eq("estado", "agendó")
         .gte("fecha_call", startOfDay)
         .lte("fecha_call", endOfDay)
         .order("fecha_call", { ascending: true });

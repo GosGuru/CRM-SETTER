@@ -1,6 +1,6 @@
 export type UserRole = "setter" | "closer";
 
-export type LeadEstado = "nuevo" | "seguimiento" | "cerrado" | "pagó";
+export type LeadEstado = "nuevo" | "agendó" | "cerrado" | "pagó";
 
 export type PlanPago = "completo" | "2_partes" | "3_partes";
 
@@ -47,6 +47,8 @@ export interface Lead {
   plan_pago: PlanPago | null;
   monto_programa: number | null;
   fecha_pago: string | null;
+  pago_reunion: boolean;
+  closer_nombre: string | null;
   cliente_potencial: boolean;
   califica_economicamente: boolean;
   created_at: string;

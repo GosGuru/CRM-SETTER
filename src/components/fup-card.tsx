@@ -113,12 +113,12 @@ export const FupCard = memo(function FupCard({
                   }
                 </button>
                 {lead?.cliente_potencial && (
-                  <span className="inline-flex items-center gap-0.5 rounded-full bg-violet-100 text-violet-700 px-1.5 py-0.5 text-[10px] font-semibold leading-none shrink-0">
+                  <span className="inline-flex items-center gap-0.5 rounded-full bg-violet-100 text-violet-700 px-1.5 py-0.5 text-xs font-semibold leading-none shrink-0">
                     ⚡ Potencial
                   </span>
                 )}
                 {lead?.califica_economicamente && (
-                  <span className="inline-flex items-center gap-0.5 rounded-full bg-emerald-100 text-emerald-700 px-1.5 py-0.5 text-[10px] font-semibold leading-none shrink-0">
+                  <span className="inline-flex items-center gap-0.5 rounded-full bg-emerald-100 text-emerald-700 px-1.5 py-0.5 text-xs font-semibold leading-none shrink-0">
                     💰 Califica
                   </span>
                 )}
@@ -131,7 +131,7 @@ export const FupCard = memo(function FupCard({
 
             {/* Fila 2: teléfono + instagram + closer */}
             {(lead?.celular || lead?.instagram || lead?.closer) && (
-              <div className="flex items-center gap-2.5 text-[11px] text-muted-foreground">
+              <div className="flex items-center gap-2.5 text-xs text-muted-foreground">
                 {lead?.celular && (
                   <span className="flex items-center gap-1">
                     <HiOutlinePhone className="h-3 w-3 shrink-0" />
@@ -155,7 +155,7 @@ export const FupCard = memo(function FupCard({
             {lastNote && (
               <div className="flex items-start gap-1 bg-muted/50 rounded-md px-2 py-1.5">
                 <HiOutlineChatBubbleLeftEllipsis className="h-3 w-3 mt-0.5 shrink-0 text-muted-foreground/60" />
-                <p className="text-[11px] text-muted-foreground leading-snug line-clamp-2">
+                <p className="text-xs text-muted-foreground leading-snug line-clamp-2">
                   {lastNote.contenido}
                 </p>
               </div>
