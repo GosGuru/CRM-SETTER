@@ -11,6 +11,13 @@ const MONTH_NAMES_ES: Record<number, string> = {
   9: "Septiembre", 10: "Octubre", 11: "Noviembre", 12: "Diciembre",
 };
 
+type AgendaLeadExportRow = {
+  id: string;
+  nombre: string;
+  fecha_call: string | null;
+  fecha_call_set_at: string;
+};
+
 function resolveExportTimeZone(rawTz: string | null): string {
   if (!rawTz) return DEFAULT_EXPORT_TIMEZONE;
   try {
@@ -33,6 +40,26 @@ function toDateKeyInTimeZone(isoValue: string, timeZone: string): string {
   const month = parts.find((p) => p.type === "month")?.value ?? "01";
   const day = parts.find((p) => p.type === "day")?.value ?? "01";
   return `${year}-${month}-${day}`;
+}
+
+function toDatePartsInTimeZone(isoValue: string, timeZone: string): { date: string; time: string } {
+  const parts = new Intl.DateTimeFormat("es-AR", {
+    timeZone,
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(new Date(isoValue));
+
+  const lookup = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value ?? "";
+
+  return {
+    date: `${lookup("day")}/${lookup("month")}/${lookup("year")}`,
+    time: `${lookup("hour")}:${lookup("minute")}`,
+  };
 }
 
 export async function GET(req: NextRequest) {
@@ -93,10 +120,11 @@ export async function GET(req: NextRequest) {
       .lte("created_at", rangeEnd),
     supabase
       .from("leads")
-      .select("id, fecha_call_set_at")
+      .select("id, nombre, fecha_call, fecha_call_set_at")
       .not("fecha_call_set_at", "is", null)
       .gte("fecha_call_set_at", rangeStart)
-      .lte("fecha_call_set_at", rangeEnd),
+      .lte("fecha_call_set_at", rangeEnd)
+      .order("fecha_call_set_at", { ascending: false }),
   ]);
 
   const inboundByDay = new Map<string, number>();
@@ -122,6 +150,14 @@ export async function GET(req: NextRequest) {
       callsByDay.set(key, (callsByDay.get(key) ?? 0) + 1);
     }
   }
+
+  const filteredAgendaLeads = (agendaLeads ?? []).filter((agendaLead) => {
+    const key = toDateKeyInTimeZone(
+      (agendaLead as { fecha_call_set_at: string }).fecha_call_set_at,
+      exportTimeZone
+    );
+    return key >= firstDay && key <= lastDay;
+  }) as AgendaLeadExportRow[];
 
   const fupsByDay = new Map<string, number>();
   for (const followup of followupsData ?? []) {
@@ -331,11 +367,128 @@ export async function GET(req: NextRequest) {
   // ---- Freeze top 4 rows for scrolling ----
   ws.views = [{ state: "frozen", xSplit: 0, ySplit: 4 }];
 
+  // ---- Leads Agendados worksheet ----
+  const agendadosWs = workbook.addWorksheet("Leads Agendados");
+  agendadosWs.columns = [
+    { key: "fechaAgendado", width: 18 },
+    { key: "horaAgendado", width: 16 },
+    { key: "lead", width: 34 },
+    { key: "fechaCall", width: 18 },
+    { key: "horaCall", width: 16 },
+  ];
+
+  const monthLabel = MONTH_NAMES_ES[month];
+  agendadosWs.mergeCells("A1:E1");
+  const agendadosTitleCell = agendadosWs.getCell("A1");
+  agendadosTitleCell.value = `Leads Agendados — ${monthLabel} ${year}`;
+  agendadosTitleCell.font = { name: "Arial", size: 14, bold: true, color: { argb: "FFFFFFFF" } };
+  agendadosTitleCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF0F766E" } };
+  agendadosTitleCell.alignment = { vertical: "middle", horizontal: "left" };
+
+  agendadosWs.mergeCells("A2:E2");
+  const periodCell = agendadosWs.getCell("A2");
+  periodCell.value = `Período: ${firstDay} a ${lastDay}`;
+  periodCell.font = { name: "Arial", size: 10, bold: true, color: { argb: "FF0F172A" } };
+  periodCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF0FDFA" } };
+  periodCell.alignment = { vertical: "middle", horizontal: "left" };
+
+  agendadosWs.mergeCells("A3:C3");
+  const tzCell = agendadosWs.getCell("A3");
+  tzCell.value = `Timezone: ${exportTimeZone}`;
+  tzCell.font = { name: "Arial", size: 10, color: { argb: "FF334155" } };
+  tzCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF8FAFC" } };
+  tzCell.alignment = { vertical: "middle", horizontal: "left" };
+
+  agendadosWs.mergeCells("D3:E3");
+  const totalAgendadosCell = agendadosWs.getCell("D3");
+  totalAgendadosCell.value = `Total agendados: ${filteredAgendaLeads.length}`;
+  totalAgendadosCell.font = { name: "Arial", size: 10, bold: true, color: { argb: "FF0F172A" } };
+  totalAgendadosCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFDCFCE7" } };
+  totalAgendadosCell.alignment = { vertical: "middle", horizontal: "right" };
+
+  const agendadosHeaders = [
+    "Fecha agendado",
+    "Hora agendado",
+    "Lead",
+    "Fecha call",
+    "Hora call",
+  ];
+
+  agendadosHeaders.forEach((header, index) => {
+    const cell = agendadosWs.getCell(4, index + 1);
+    cell.value = header;
+    cell.font = { name: "Arial", size: 11, bold: true, color: { argb: "FFFFFFFF" } };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1F2937" } };
+    cell.alignment = { vertical: "middle", horizontal: "center" };
+    cell.border = {
+      top: { style: "thin" },
+      bottom: { style: "thin" },
+      left: { style: "thin" },
+      right: { style: "thin" },
+    };
+  });
+  agendadosWs.getRow(4).height = 24;
+
+  if (filteredAgendaLeads.length === 0) {
+    agendadosWs.mergeCells("A5:E5");
+    const emptyCell = agendadosWs.getCell("A5");
+    emptyCell.value = "Sin leads agendados en este período";
+    emptyCell.font = { name: "Arial", size: 10, italic: true, color: { argb: "FF64748B" } };
+    emptyCell.alignment = { vertical: "middle", horizontal: "center" };
+    emptyCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF8FAFC" } };
+    emptyCell.border = {
+      top: { style: "thin" },
+      bottom: { style: "thin" },
+      left: { style: "thin" },
+      right: { style: "thin" },
+    };
+  } else {
+    filteredAgendaLeads.forEach((lead, index) => {
+      const rowNumber = index + 5;
+      const agendado = toDatePartsInTimeZone(lead.fecha_call_set_at, exportTimeZone);
+      const call = lead.fecha_call
+        ? toDatePartsInTimeZone(lead.fecha_call, exportTimeZone)
+        : null;
+
+      const values = [
+        agendado.date,
+        agendado.time,
+        lead.nombre,
+        call?.date ?? "",
+        call?.time ?? "",
+      ];
+
+      values.forEach((value, cellIndex) => {
+        const cell = agendadosWs.getCell(rowNumber, cellIndex + 1);
+        cell.value = value;
+        cell.font = { name: "Arial", size: 10, color: { argb: "FF0F172A" } };
+        cell.alignment = {
+          vertical: "middle",
+          horizontal: cellIndex === 2 ? "left" : "center",
+          wrapText: true,
+        };
+        cell.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: rowNumber % 2 === 0 ? "FFF8FAFC" : "FFFFFFFF" },
+        };
+        cell.border = {
+          top: { style: "thin" },
+          bottom: { style: "thin" },
+          left: { style: "thin" },
+          right: { style: "thin" },
+        };
+      });
+    });
+  }
+
+  agendadosWs.autoFilter = "A4:E4";
+  agendadosWs.views = [{ state: "frozen", xSplit: 0, ySplit: 4 }];
+
   // ---- Serialize ----
   const buffer = await workbook.xlsx.writeBuffer();
 
-  const monthLabel = MONTH_NAMES_ES[month];
-  const filename = `KPIs_${monthLabel}_${year}.xlsx`;
+  const filename = `KPIs_y_Agendados_${monthLabel}_${year}.xlsx`;
 
   return new NextResponse(buffer as ArrayBuffer, {
     status: 200,

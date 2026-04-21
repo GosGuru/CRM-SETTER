@@ -89,10 +89,10 @@ function ExportKPIsButton({ profileName }: { profileName?: string | null }) {
       a.href = url;
       const monthLabel = MONTH_NAMES.find((m) => m.value === month)?.label ?? String(month);
       const safeProfileName = sanitizeFilenamePart(profileName ?? "") || "Perfil";
-      a.download = `${safeProfileName}_KPIs_${monthLabel}_${year}.xlsx`;
+      a.download = `${safeProfileName}_KPIs_y_Agendados_${monthLabel}_${year}.xlsx`;
       a.click();
       URL.revokeObjectURL(url);
-      toast.success("Excel exportado correctamente");
+      toast.success("Excel completo exportado: KPIs + leads agendados");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Error al exportar");
     } finally {
@@ -107,7 +107,7 @@ function ExportKPIsButton({ profileName }: { profileName?: string | null }) {
       <CardHeader className="pb-3">
         <CardTitle className="text-lg flex items-center gap-2">
           <HiOutlineArrowDownTray className="h-5 w-5 text-emerald-500" />
-          Exportar KPIs — Excel
+          Exportar KPIs + Agendados — Excel
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -144,9 +144,12 @@ function ExportKPIsButton({ profileName }: { profileName?: string | null }) {
             className="cursor-pointer bg-emerald-600 hover:bg-emerald-700"
           >
             <HiOutlineArrowDownTray className="mr-1.5 h-4 w-4" />
-            {loading ? "Generando…" : "Descargar Excel"}
+            {loading ? "Generando…" : "Descargar Excel completo"}
           </Button>
         </div>
+        <p className="mt-3 text-sm text-muted-foreground">
+          Incluye una hoja extra con los leads agendados del período.
+        </p>
       </CardContent>
     </Card>
   );
