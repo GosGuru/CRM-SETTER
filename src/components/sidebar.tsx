@@ -92,7 +92,7 @@ export function Sidebar() {
               useUIStore.getState().setQuickAddOpen(true);
               setSidebarOpen(false);
             }}
-            className="flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-primary px-3 text-sm font-semibold text-primary-foreground shadow-sm transition-colors duration-200 hover:bg-primary/90 cursor-pointer"
+            className="flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-primary px-3 text-sm font-semibold text-primary-foreground shadow-sm transition-colors duration-200 hover:bg-primary/90 cursor-pointer md:hidden"
           >
             <HiOutlineUserPlus className="h-4.5 w-4.5" />
             Agregar Lead

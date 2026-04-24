@@ -1,4 +1,5 @@
 import { Sidebar } from "@/components/sidebar";
+import TopRightAddLead from "@/components/top-right-add-lead";
 import { QuickAddLeadDialog } from "@/components/quick-add-lead-dialog";
 
 export default function DashboardLayout({
@@ -12,6 +13,7 @@ export default function DashboardLayout({
       <main className="flex-1 overflow-y-auto bg-muted/30">
         <div className="p-4 pt-16 md:p-6 md:pt-6 animate-blur-fade">{children}</div>
       </main>
+      <TopRightAddLead />
       <QuickAddLeadDialog />
     </div>
   );
