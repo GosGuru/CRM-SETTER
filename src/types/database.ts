@@ -11,7 +11,8 @@ export type InteractionTipo =
   | "llamada"
   | "whatsapp"
   | "cambio_estado"
-  | "calendario_enviado";
+  | "calendario_enviado"
+  | "fup_realizado";
 
 export interface User {
   id: string;

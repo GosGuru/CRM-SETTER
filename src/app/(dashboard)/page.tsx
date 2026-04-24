@@ -89,10 +89,10 @@ function ExportKPIsButton({ profileName }: { profileName?: string | null }) {
       a.href = url;
       const monthLabel = MONTH_NAMES.find((m) => m.value === month)?.label ?? String(month);
       const safeProfileName = sanitizeFilenamePart(profileName ?? "") || "Perfil";
-      a.download = `${safeProfileName}_KPIs_y_Agendados_${monthLabel}_${year}.xlsx`;
+      a.download = `${safeProfileName}_KPIs_Agendados_y_FUPs_${monthLabel}_${year}.xlsx`;
       a.click();
       URL.revokeObjectURL(url);
-      toast.success("Excel completo exportado: KPIs + leads agendados");
+      toast.success("Excel exportado: KPIs + agendados + FUPs");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Error al exportar");
     } finally {
@@ -107,7 +107,7 @@ function ExportKPIsButton({ profileName }: { profileName?: string | null }) {
       <CardHeader className="pb-3">
         <CardTitle className="text-lg flex items-center gap-2">
           <HiOutlineArrowDownTray className="h-5 w-5 text-emerald-500" />
-          Exportar KPIs + Agendados — Excel
+          Exportar KPIs + Agendados + FUPs — Excel
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -148,7 +148,7 @@ function ExportKPIsButton({ profileName }: { profileName?: string | null }) {
           </Button>
         </div>
         <p className="mt-3 text-sm text-muted-foreground">
-          Incluye una hoja extra con los leads agendados del período.
+          Incluye hojas extra con leads agendados y FUPs realizados del período.
         </p>
       </CardContent>
     </Card>
@@ -259,7 +259,7 @@ export default function DashboardPage() {
     fecha: formatFecha(row.fecha),
     fechaISO: row.fecha,
     Inbound: row.inbound_nuevo,
-    FUPs: row.fups,
+    "FUPs hechos": row.fups,
     "Cal. Env.": row.calendarios_enviados,
     Agendadas: row.calls_agendadas,
   }));
@@ -384,7 +384,7 @@ export default function DashboardPage() {
             onClick={() => openDetail("inbound")}
           />
           <StatCard
-            title="FUPS"
+            title="FUPs hechos"
             value={kpi?.fups ?? 0}
             icon={HiOutlinePhoneArrowUpRight}
             color="bg-indigo-600"
@@ -447,7 +447,7 @@ export default function DashboardPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Inbound</TableHead>
-                    <TableHead>FUPS</TableHead>
+                    <TableHead>FUPs hechos</TableHead>
                     <TableHead>Cal. Env.</TableHead>
                     <TableHead>Agendadas</TableHead>
                     <TableHead>Tasa %</TableHead>
@@ -514,7 +514,7 @@ export default function DashboardPage() {
           {totals && (
             <div className="flex flex-wrap gap-4 text-xs text-muted-foreground pt-1">
               <span>Inbound: <strong className="text-foreground">{totals.inbound}</strong></span>
-              <span>FUPs: <strong className="text-foreground">{totals.fups}</strong></span>
+              <span>FUPs hechos: <strong className="text-foreground">{totals.fups}</strong></span>
               <span>Cal. Env.: <strong className="text-foreground">{totals.cal}</strong></span>
               <span>Agendadas: <strong className="text-foreground">{totals.calls}</strong></span>
               <span>Tasa: <strong className="text-foreground">{totalTasa}%</strong></span>
@@ -555,7 +555,7 @@ export default function DashboardPage() {
                     onClick={(data: unknown) => openDetail("inbound", (data as { fechaISO?: string }).fechaISO)}
                   />
                   <Bar
-                    dataKey="FUPs"
+                    dataKey="FUPs hechos"
                     fill="#4f46e5"
                     radius={[4, 4, 0, 0]}
                     style={{ cursor: "pointer" }}
@@ -591,7 +591,7 @@ export default function DashboardPage() {
         <div className="flex items-center gap-3 mb-3">
           <h2 className="text-lg font-semibold flex items-center gap-2">
             <HiOutlineClipboardDocumentCheck className="h-5 w-5 text-indigo-500" />
-            FUPs del día
+            FUPs programados del día
           </h2>
           {fupsTotal > 0 && (
             <Badge variant={fupsCompletados === fupsTotal ? "default" : "secondary"} className="text-xs" role="status">

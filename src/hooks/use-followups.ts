@@ -127,6 +127,8 @@ export function useCompleteFollowup() {
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["fups"] });
       queryClient.invalidateQueries({ queryKey: ["stats"] });
+      queryClient.invalidateQueries({ queryKey: ["kpi-history"] });
+      queryClient.invalidateQueries({ queryKey: ["kpi-detail"] });
     },
   });
 }
@@ -165,6 +167,8 @@ export function useDeleteFollowup() {
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["fups"] });
       queryClient.invalidateQueries({ queryKey: ["stats"] });
+      queryClient.invalidateQueries({ queryKey: ["kpi-history"] });
+      queryClient.invalidateQueries({ queryKey: ["kpi-detail"] });
     },
   });
 }

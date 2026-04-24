@@ -1,5 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import {
+  FUP_REALIZADO_TIPO,
+  buildUniqueFupDoneRecords,
+  getFupDoneSourceLabel,
+  type FupDoneFollowupRow,
+  type FupDoneInteractionRow,
+  type FupDoneRecord,
+} from "@/lib/fup-metrics";
 import ExcelJS from "exceljs";
 
 const CASH_PER_AGENDA = 32;
@@ -98,7 +106,8 @@ export async function GET(req: NextRequest) {
   // Fetch all data for the month in parallel
   const [
     { data: leads },
-    { data: followupsData },
+    { data: completedFollowups },
+    { data: fupInteractions },
     { data: interactions },
     { data: agendaLeads },
   ] = await Promise.all([
@@ -109,9 +118,17 @@ export async function GET(req: NextRequest) {
       .lte("created_at", rangeEnd),
     supabase
       .from("followups")
-      .select("fecha_programada")
-      .gte("fecha_programada", firstDay)
-      .lte("fecha_programada", lastDay),
+      .select("id, lead_id, completado_at, lead:leads(id, nombre, estado)")
+      .eq("completado", true)
+      .not("completado_at", "is", null)
+      .gte("completado_at", rangeStart)
+      .lte("completado_at", rangeEnd),
+    supabase
+      .from("interactions")
+      .select("id, lead_id, tipo, contenido, created_at, lead:leads(id, nombre, estado)")
+      .in("tipo", [FUP_REALIZADO_TIPO, "whatsapp"])
+      .gte("created_at", rangeStart)
+      .lte("created_at", rangeEnd),
     supabase
       .from("interactions")
       .select("tipo, created_at")
@@ -159,13 +176,31 @@ export async function GET(req: NextRequest) {
     return key >= firstDay && key <= lastDay;
   }) as AgendaLeadExportRow[];
 
-  const fupsByDay = new Map<string, number>();
-  for (const followup of followupsData ?? []) {
-    const key = (followup as { fecha_programada: string }).fecha_programada;
+  const completedFupRows = (completedFollowups ?? []) as unknown as FupDoneFollowupRow[];
+  const fupInteractionRows = (fupInteractions ?? []) as unknown as FupDoneInteractionRow[];
+  const completedFupsByDay = new Map<string, FupDoneFollowupRow[]>();
+  const manualFupsByDay = new Map<string, FupDoneInteractionRow[]>();
+
+  for (const followup of completedFupRows) {
+    if (!followup.completado_at) continue;
+    const key = toDateKeyInTimeZone(followup.completado_at, exportTimeZone);
     if (key >= firstDay && key <= lastDay) {
-      fupsByDay.set(key, (fupsByDay.get(key) ?? 0) + 1);
+      const dayRows = completedFupsByDay.get(key) ?? [];
+      dayRows.push(followup);
+      completedFupsByDay.set(key, dayRows);
     }
   }
+
+  for (const interaction of fupInteractionRows) {
+    const key = toDateKeyInTimeZone(interaction.created_at, exportTimeZone);
+    if (key >= firstDay && key <= lastDay) {
+      const dayRows = manualFupsByDay.get(key) ?? [];
+      dayRows.push(interaction);
+      manualFupsByDay.set(key, dayRows);
+    }
+  }
+
+  const fupRecordsForExport: FupDoneRecord[] = [];
 
   // Build daily rows
   const rows: {
@@ -183,9 +218,15 @@ export async function GET(req: NextRequest) {
   for (let d = 1; d <= totalDays; d++) {
     const dateStr = `${year}-${String(month).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
     const inbound = inboundByDay.get(dateStr) ?? 0;
-    const fups = fupsByDay.get(dateStr) ?? 0;
+    const fupRecords = buildUniqueFupDoneRecords(
+      completedFupsByDay.get(dateStr) ?? [],
+      manualFupsByDay.get(dateStr) ?? []
+    );
+    const fups = fupRecords.length;
     const cal = calByDay.get(dateStr) ?? 0;
     const calls = callsByDay.get(dateStr) ?? 0;
+
+    fupRecordsForExport.push(...fupRecords);
 
     const tasa = inbound > 0 ? `${((calls / inbound) * 100).toFixed(2)}%` : "0.00%";
     const cash = calls * CASH_PER_AGENDA;
@@ -218,7 +259,7 @@ export async function GET(req: NextRequest) {
     { key: "B", width: 14 }, // Mes
     { key: "C", width: 16 }, // Calificadas
     { key: "D", width: 16 }, // Inbound Nuevo
-    { key: "E", width: 12 }, // FUPS
+    { key: "E", width: 14 }, // FUPS HECHOS
     { key: "F", width: 22 }, // CALENDARIOS ENVIADOS
     { key: "G", width: 18 }, // CALLS AGENDADAS
     { key: "H", width: 16 }, // Tasa de Agenda
@@ -244,7 +285,7 @@ export async function GET(req: NextRequest) {
     { col: "B", label: "Mes", yellow: false },
     { col: "C", label: "Calificadas", yellow: true },
     { col: "D", label: "Inbound Nuevo", yellow: true },
-    { col: "E", label: "FUPS", yellow: false },
+    { col: "E", label: "FUPS HECHOS", yellow: false },
     { col: "F", label: "CALENDARIOS ENVIADOS", yellow: false },
     { col: "G", label: "CALLS AGENDADAS", yellow: false },
     { col: "H", label: "Tasa de Agenda", yellow: false },
@@ -485,10 +526,117 @@ export async function GET(req: NextRequest) {
   agendadosWs.autoFilter = "A4:E4";
   agendadosWs.views = [{ state: "frozen", xSplit: 0, ySplit: 4 }];
 
+  // ---- FUPs Realizados worksheet ----
+  const fupsWs = workbook.addWorksheet("FUPs Realizados");
+  fupsWs.columns = [
+    { key: "fecha", width: 18 },
+    { key: "hora", width: 14 },
+    { key: "lead", width: 34 },
+    { key: "fuente", width: 22 },
+    { key: "detalle", width: 40 },
+  ];
+
+  fupsWs.mergeCells("A1:E1");
+  const fupsTitleCell = fupsWs.getCell("A1");
+  fupsTitleCell.value = `FUPs Realizados — ${monthLabel} ${year}`;
+  fupsTitleCell.font = { name: "Arial", size: 14, bold: true, color: { argb: "FFFFFFFF" } };
+  fupsTitleCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF4338CA" } };
+  fupsTitleCell.alignment = { vertical: "middle", horizontal: "left" };
+
+  fupsWs.mergeCells("A2:C2");
+  const fupsPeriodCell = fupsWs.getCell("A2");
+  fupsPeriodCell.value = `Período: ${firstDay} a ${lastDay}`;
+  fupsPeriodCell.font = { name: "Arial", size: 10, bold: true, color: { argb: "FF0F172A" } };
+  fupsPeriodCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE0E7FF" } };
+  fupsPeriodCell.alignment = { vertical: "middle", horizontal: "left" };
+
+  fupsWs.mergeCells("D2:E2");
+  const fupsTotalCell = fupsWs.getCell("D2");
+  fupsTotalCell.value = `Total FUPs hechos: ${fupRecordsForExport.length}`;
+  fupsTotalCell.font = { name: "Arial", size: 10, bold: true, color: { argb: "FF0F172A" } };
+  fupsTotalCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEEF2FF" } };
+  fupsTotalCell.alignment = { vertical: "middle", horizontal: "right" };
+
+  fupsWs.mergeCells("A3:E3");
+  const fupsTzCell = fupsWs.getCell("A3");
+  fupsTzCell.value = `Timezone: ${exportTimeZone}`;
+  fupsTzCell.font = { name: "Arial", size: 10, color: { argb: "FF334155" } };
+  fupsTzCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF8FAFC" } };
+  fupsTzCell.alignment = { vertical: "middle", horizontal: "left" };
+
+  ["Fecha", "Hora", "Lead", "Fuente", "Detalle"].forEach((header, index) => {
+    const cell = fupsWs.getCell(4, index + 1);
+    cell.value = header;
+    cell.font = { name: "Arial", size: 11, bold: true, color: { argb: "FFFFFFFF" } };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1F2937" } };
+    cell.alignment = { vertical: "middle", horizontal: "center" };
+    cell.border = {
+      top: { style: "thin" },
+      bottom: { style: "thin" },
+      left: { style: "thin" },
+      right: { style: "thin" },
+    };
+  });
+  fupsWs.getRow(4).height = 24;
+
+  if (fupRecordsForExport.length === 0) {
+    fupsWs.mergeCells("A5:E5");
+    const emptyFupsCell = fupsWs.getCell("A5");
+    emptyFupsCell.value = "Sin FUPs realizados en este período";
+    emptyFupsCell.font = { name: "Arial", size: 10, italic: true, color: { argb: "FF64748B" } };
+    emptyFupsCell.alignment = { vertical: "middle", horizontal: "center" };
+    emptyFupsCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF8FAFC" } };
+    emptyFupsCell.border = {
+      top: { style: "thin" },
+      bottom: { style: "thin" },
+      left: { style: "thin" },
+      right: { style: "thin" },
+    };
+  } else {
+    fupRecordsForExport
+      .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+      .forEach((record, index) => {
+        const rowNumber = index + 5;
+        const doneAt = toDatePartsInTimeZone(record.timestamp, exportTimeZone);
+        const values = [
+          doneAt.date,
+          doneAt.time,
+          record.leadName,
+          getFupDoneSourceLabel(record.sources),
+          record.note ?? "",
+        ];
+
+        values.forEach((value, cellIndex) => {
+          const cell = fupsWs.getCell(rowNumber, cellIndex + 1);
+          cell.value = value;
+          cell.font = { name: "Arial", size: 10, color: { argb: "FF0F172A" } };
+          cell.alignment = {
+            vertical: "middle",
+            horizontal: cellIndex >= 2 ? "left" : "center",
+            wrapText: true,
+          };
+          cell.fill = {
+            type: "pattern",
+            pattern: "solid",
+            fgColor: { argb: rowNumber % 2 === 0 ? "FFF8FAFC" : "FFFFFFFF" },
+          };
+          cell.border = {
+            top: { style: "thin" },
+            bottom: { style: "thin" },
+            left: { style: "thin" },
+            right: { style: "thin" },
+          };
+        });
+      });
+  }
+
+  fupsWs.autoFilter = "A4:E4";
+  fupsWs.views = [{ state: "frozen", xSplit: 0, ySplit: 4 }];
+
   // ---- Serialize ----
   const buffer = await workbook.xlsx.writeBuffer();
 
-  const filename = `KPIs_y_Agendados_${monthLabel}_${year}.xlsx`;
+  const filename = `KPIs_Agendados_y_FUPs_${monthLabel}_${year}.xlsx`;
 
   return new NextResponse(buffer as ArrayBuffer, {
     status: 200,

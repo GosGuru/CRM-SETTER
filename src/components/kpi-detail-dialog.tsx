@@ -20,7 +20,7 @@ const TIPO_CONFIG: Record<
   { label: string; icon: React.ElementType; color: string }
 > = {
   inbound: { label: "Inbound Nuevo", icon: HiOutlineUserPlus, color: "text-blue-600" },
-  fups: { label: "FUPs", icon: HiOutlinePhoneArrowUpRight, color: "text-indigo-600" },
+  fups: { label: "FUPs hechos", icon: HiOutlinePhoneArrowUpRight, color: "text-indigo-600" },
   cal_enviados: { label: "Calendarios Enviados", icon: HiOutlinePaperAirplane, color: "text-cyan-600" },
   calls_agendadas: { label: "Calls Agendadas", icon: HiOutlineCalendarDays, color: "text-amber-600" },
   tasa: { label: "Tasa de Agenda", icon: HiOutlineChartBarSquare, color: "text-emerald-600" },

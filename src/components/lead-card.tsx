@@ -285,6 +285,10 @@ export const LeadCard = memo(function LeadCardInner({ lead, selectable, selected
                     <HiOutlineBanknotes className="mr-2 h-4 w-4 text-green-600" />
                     Pagó reunión ($32)
                   </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => onAction(lead.id, "fup_hecho")}>
+                    <HiOutlineClipboardDocumentCheck className="mr-2 h-4 w-4 text-indigo-600" />
+                    FUP hecho
+                  </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => onAction(lead.id, "nuevo")}>
                     <HiOutlineXCircle className="mr-2 h-4 w-4 text-gray-400" />

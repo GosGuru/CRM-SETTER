@@ -233,7 +233,7 @@ export default function NewLeadPage() {
         </CardContent>
       </Card>
 
-      <Card className="border-primary/20 bg-gradient-to-br from-background via-background to-muted/60">
+      <Card className="border-primary/20 bg-linear-to-br from-background via-background to-muted/60">
         <CardHeader>
           <div className="flex items-center gap-2">
             <HiOutlineClipboardDocumentCheck className="h-5 w-5 text-primary" />

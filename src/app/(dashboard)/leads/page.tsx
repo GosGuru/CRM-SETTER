@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { createClient } from "@/lib/supabase/client";
 import { localDateStr } from "@/lib/utils";
+import { FUP_REALIZADO_TIPO } from "@/lib/fup-metrics";
 import {
   useInfiniteLeads,
   useBulkUpdateLeads,
@@ -395,6 +396,16 @@ export default function LeadsPage() {
           { onSuccess: () => toast.success("Pago de reunión registrado") }
         );
         break;
+      case "fup_hecho":
+        if (!currentUser) {
+          toast.error("No se pudo obtener el usuario actual");
+          break;
+        }
+        bulkInteractions.mutate(
+          [{ lead_id: leadId, user_id: currentUser.id, tipo: FUP_REALIZADO_TIPO, contenido: "FUP realizado" }],
+          { onSuccess: () => toast.success("FUP registrado") }
+        );
+        break;
       case "nuevo":
         updateLead.mutate(
           { id: leadId, estado: "nuevo" },
@@ -551,7 +562,7 @@ export default function LeadsPage() {
   };
 
   const handleBulkQuickAction = (
-    tipo: "llamada" | "whatsapp" | "calendario_enviado",
+    tipo: "llamada" | "whatsapp" | "calendario_enviado" | typeof FUP_REALIZADO_TIPO,
     contenido: string
   ) => {
     if (selected.size === 0 || !currentUser) return;
@@ -690,7 +701,7 @@ export default function LeadsPage() {
       </div>
 
       {/* Buscador y Filtros — sticky */}
-      <div className="sticky top-0 z-30 -mx-4 px-4 py-2 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 border-b">
+      <div className="sticky top-0 z-30 -mx-4 px-4 py-2 bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/80 border-b">
       <div className="flex items-center gap-2 w-full animate-blur-fade">
         <div className="relative flex-1 min-w-0">
           <HiOutlineMagnifyingGlass className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -910,7 +921,7 @@ export default function LeadsPage() {
 
       {/* Barra de acciones en masa — fija y compacta */}
       {selectMode && selected.size > 0 && typeof window !== "undefined" && createPortal(
-        <div className="fixed bottom-3 left-1/2 md:left-[calc(50%+8rem)] z-40 w-[min(96vw,1100px)] md:w-[min(calc(100vw-18rem),1100px)] -translate-x-1/2 rounded-2xl border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/85 shadow-[0_10px_30px_rgba(0,0,0,0.14)] animate-in slide-in-from-bottom-2 duration-200">
+        <div className="fixed bottom-3 left-1/2 md:left-[calc(50%+8rem)] z-40 w-[min(96vw,1100px)] md:w-[min(calc(100vw-18rem),1100px)] -translate-x-1/2 rounded-2xl border bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/85 shadow-[0_10px_30px_rgba(0,0,0,0.14)] animate-in slide-in-from-bottom-2 duration-200">
           <div className="px-3 py-2.5 space-y-2">
             <div className="grid grid-cols-[auto_1fr_auto] items-center gap-2">
               <Badge variant="secondary" className="text-sm shrink-0 justify-self-start">
@@ -939,6 +950,16 @@ export default function LeadsPage() {
                   >
                     <HiOutlineChatBubbleLeftRight className="mr-1 h-3.5 w-3.5" />
                     WhatsApp
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={isPending}
+                    onClick={() => handleBulkQuickAction(FUP_REALIZADO_TIPO, "FUP realizado")}
+                    className="cursor-pointer h-8 text-xs text-indigo-600 border-indigo-200 hover:bg-indigo-50"
+                  >
+                    <HiOutlineClipboardDocumentCheck className="mr-1 h-3.5 w-3.5" />
+                    FUP hecho
                   </Button>
                   <Button
                     variant="outline"

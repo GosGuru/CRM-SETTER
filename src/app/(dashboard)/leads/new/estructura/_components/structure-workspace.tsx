@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
+import { useUIStore } from "@/stores/ui-store";
 import {
   DEFAULT_STRUCTURE_DRAFTS,
   STRUCTURE_KIND_LABELS,
@@ -21,6 +22,7 @@ import {
   HiOutlineClipboardDocument,
   HiOutlineCloudArrowUp,
   HiOutlineTrash,
+  HiOutlineUserPlus,
 } from "react-icons/hi2";
 
 function buildBlockCopy(block: StructureBlock, content: string) {
@@ -56,6 +58,7 @@ function extractLines(value: string) {
 }
 
 export function StructureWorkspace() {
+  const setQuickAddOpen = useUIStore((state) => state.setQuickAddOpen);
   const [activeStepId, setActiveStepId] = useState(STRUCTURE_STEPS[0]?.id ?? "paso-1");
   const [drafts, setDrafts] = useState<Record<string, string>>(DEFAULT_STRUCTURE_DRAFTS);
   const [storageReady, setStorageReady] = useState(false);
@@ -235,7 +238,7 @@ export function StructureWorkspace() {
       </Card>
 
       <div className="space-y-4">
-        <Card className="overflow-hidden border-primary/20 bg-gradient-to-br from-background via-background to-muted/60">
+        <Card className="overflow-hidden border-primary/20 bg-linear-to-br from-background via-background to-muted/60">
           <CardHeader className="space-y-3">
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant="secondary">Paso actual</Badge>
@@ -310,25 +313,37 @@ export function StructureWorkspace() {
                         <CardDescription>{block.helper}</CardDescription>
                       </div>
                     </div>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant={isCopied ? "secondary" : "outline"}
-                      className="cursor-pointer"
-                      onClick={() => handleCopy(value, block.id, block.title)}
-                    >
-                      {isCopied ? (
-                        <>
-                          <HiOutlineCheck className="mr-1 h-3.5 w-3.5" />
-                          Copiado
-                        </>
-                      ) : (
-                        <>
-                          <HiOutlineClipboardDocument className="mr-1 h-3.5 w-3.5" />
-                          Copiar
-                        </>
-                      )}
-                    </Button>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        className="cursor-pointer"
+                        onClick={() => setQuickAddOpen(true)}
+                      >
+                        <HiOutlineUserPlus className="mr-1 h-3.5 w-3.5" />
+                        Agregar lead
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={isCopied ? "secondary" : "outline"}
+                        className="cursor-pointer"
+                        onClick={() => handleCopy(value, block.id, block.title)}
+                      >
+                        {isCopied ? (
+                          <>
+                            <HiOutlineCheck className="mr-1 h-3.5 w-3.5" />
+                            Copiado
+                          </>
+                        ) : (
+                          <>
+                            <HiOutlineClipboardDocument className="mr-1 h-3.5 w-3.5" />
+                            Copiar
+                          </>
+                        )}
+                      </Button>
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-2">

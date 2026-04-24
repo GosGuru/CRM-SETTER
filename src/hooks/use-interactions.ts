@@ -44,6 +44,8 @@ export function useCreateInteraction() {
         queryKey: ["interactions", variables.lead_id],
       });
       queryClient.invalidateQueries({ queryKey: ["stats"] });
+      queryClient.invalidateQueries({ queryKey: ["kpi-history"] });
+      queryClient.invalidateQueries({ queryKey: ["kpi-detail"] });
     },
   });
 }
@@ -65,6 +67,8 @@ export function useBulkCreateInteractions() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["interactions"] });
       queryClient.invalidateQueries({ queryKey: ["stats"] });
+      queryClient.invalidateQueries({ queryKey: ["kpi-history"] });
+      queryClient.invalidateQueries({ queryKey: ["kpi-detail"] });
     },
   });
 }
@@ -86,6 +90,8 @@ export function useDeleteInteraction() {
         queryKey: ["interactions", variables.lead_id],
       });
       queryClient.invalidateQueries({ queryKey: ["stats"] });
+      queryClient.invalidateQueries({ queryKey: ["kpi-history"] });
+      queryClient.invalidateQueries({ queryKey: ["kpi-detail"] });
     },
   });
 }

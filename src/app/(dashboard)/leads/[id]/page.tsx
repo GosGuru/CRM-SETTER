@@ -3,6 +3,7 @@
 import { use, useEffect, useState } from "react";
 import { localDateStr } from "@/lib/utils";
 import { cn } from "@/lib/utils";
+import { FUP_REALIZADO_TIPO } from "@/lib/fup-metrics";
 import { useLead, useUpdateLead } from "@/hooks/use-leads";
 import { useInteractions, useCreateInteraction, useDeleteInteraction } from "@/hooks/use-interactions";
 import { useLeadFollowups } from "@/hooks/use-followups";
@@ -63,6 +64,7 @@ const interactionIcons: Record<InteractionTipo, React.ElementType> = {
   whatsapp: HiOutlineChatBubbleLeftRight,
   cambio_estado: HiOutlineArrowPath,
   calendario_enviado: HiOutlinePaperAirplane,
+  fup_realizado: HiOutlineClipboardDocumentCheck,
 };
 
 export default function LeadDetailPage({
@@ -88,6 +90,7 @@ export default function LeadDetailPage({
   const [apellido, setApellido] = useState("");
   const [closerInput, setCloserInput] = useState("");
 
+  /* eslint-disable react-hooks/set-state-in-effect -- Lead data arrives async; these editable drafts reset only when opening another lead. */
   useEffect(() => {
     if (lead) {
       setNombreReal(lead.nombre_real ?? "");
@@ -95,6 +98,7 @@ export default function LeadDetailPage({
       setCloserInput(lead.closer_nombre ?? lead.closer?.full_name ?? "");
     }
   }, [lead?.id]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
@@ -132,7 +136,7 @@ export default function LeadDetailPage({
     );
   };
 
-  const quickAction = (tipo: "llamada" | "whatsapp" | "calendario_enviado", contenido: string) => {
+  const quickAction = (tipo: "llamada" | "whatsapp" | "calendario_enviado" | typeof FUP_REALIZADO_TIPO, contenido: string) => {
     if (!currentUser || !lead) return;
     createInteraction.mutate(
       { lead_id: lead.id, user_id: currentUser.id, tipo, contenido },
@@ -429,9 +433,9 @@ export default function LeadDetailPage({
                   size="sm"
                   className="cursor-pointer h-11 justify-start"
                   disabled={createInteraction.isPending}
-                  onClick={() => quickAction("whatsapp", "FUP enviado")}
+                  onClick={() => quickAction(FUP_REALIZADO_TIPO, "FUP realizado")}
                 >
-                  <HiOutlineChatBubbleLeftRight className="mr-1.5 h-4 w-4" /> FUP
+                  <HiOutlineClipboardDocumentCheck className="mr-1.5 h-4 w-4" /> FUP
                 </Button>
                 <Button
                   variant="outline"
@@ -649,6 +653,15 @@ export default function LeadDetailPage({
                   onClick={() => quickAction("whatsapp", "WhatsApp enviado")}
                 >
                   <HiOutlineChatBubbleLeftRight className="mr-1.5 h-4 w-4" /> WhatsApp
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="cursor-pointer h-11 justify-start text-indigo-600 border-indigo-200 hover:bg-indigo-50"
+                  disabled={createInteraction.isPending}
+                  onClick={() => quickAction(FUP_REALIZADO_TIPO, "FUP realizado")}
+                >
+                  <HiOutlineClipboardDocumentCheck className="mr-1.5 h-4 w-4" /> FUP
                 </Button>
                 <Button
                   variant="outline"

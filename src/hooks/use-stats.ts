@@ -1,6 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { localDateStr, localDayBoundsISO } from "@/lib/utils";
+import {
+  FUP_REALIZADO_TIPO,
+  buildUniqueFupDoneRecords,
+  getFupDoneSourceLabel,
+  type FupDoneFollowupRow,
+  type FupDoneInteractionRow,
+} from "@/lib/fup-metrics";
 import type { DailyKPI, KPIDetailType, Lead, AppSettings } from "@/types/database";
 
 let _supabase: ReturnType<typeof createClient>;
@@ -61,7 +68,8 @@ export function useStats(fecha: string) {
       const [
         settings,
         { count: inboundNuevo },
-        { count: fupCount },
+        { data: completedFollowups },
+        { data: fupInteractions },
         { count: calEnviados },
         { count: callsAgendadas },
         { count: activos },
@@ -75,8 +83,17 @@ export function useStats(fecha: string) {
           .lte("created_at", endOfDay),
         getSupabase()
           .from("followups")
-          .select("*", { count: "exact", head: true })
-          .eq("fecha_programada", fecha),
+          .select("id, lead_id, completado_at, lead:leads(id, nombre, estado)")
+          .eq("completado", true)
+          .not("completado_at", "is", null)
+          .gte("completado_at", startOfDay)
+          .lte("completado_at", endOfDay),
+        getSupabase()
+          .from("interactions")
+          .select("id, lead_id, tipo, contenido, created_at, lead:leads(id, nombre, estado)")
+          .in("tipo", [FUP_REALIZADO_TIPO, "whatsapp"])
+          .gte("created_at", startOfDay)
+          .lte("created_at", endOfDay),
         getSupabase()
           .from("interactions")
           .select("*", { count: "exact", head: true })
@@ -108,10 +125,15 @@ export function useStats(fecha: string) {
         0
       );
 
+      const fupCount = buildUniqueFupDoneRecords(
+        (completedFollowups ?? []) as unknown as FupDoneFollowupRow[],
+        (fupInteractions ?? []) as unknown as FupDoneInteractionRow[]
+      ).length;
+
       const kpi = buildKPI(
         fecha,
         inboundNuevo ?? 0,
-        fupCount ?? 0,
+        fupCount,
         calEnviados ?? 0,
         callsAgendadas ?? 0,
         programCommission,
@@ -141,7 +163,8 @@ export function useKPIHistory(days = 7) {
       const [
         settings,
         { data: leads },
-        { data: followupsData },
+        { data: completedFollowups },
+        { data: fupInteractions },
         { data: interactions },
         { data: agendaLeads },
         { data: programLeads },
@@ -154,9 +177,17 @@ export function useKPIHistory(days = 7) {
           .lte("created_at", rangeEnd),
         getSupabase()
           .from("followups")
-          .select("fecha_programada")
-          .gte("fecha_programada", dates[0])
-          .lte("fecha_programada", dates[dates.length - 1]),
+          .select("id, lead_id, completado_at, lead:leads(id, nombre, estado)")
+          .eq("completado", true)
+          .not("completado_at", "is", null)
+          .gte("completado_at", rangeStart)
+          .lte("completado_at", rangeEnd),
+        getSupabase()
+          .from("interactions")
+          .select("id, lead_id, tipo, contenido, created_at, lead:leads(id, nombre, estado)")
+          .in("tipo", [FUP_REALIZADO_TIPO, "whatsapp"])
+          .gte("created_at", rangeStart)
+          .lte("created_at", rangeEnd),
         getSupabase()
           .from("interactions")
           .select("tipo, created_at")
@@ -186,8 +217,13 @@ export function useKPIHistory(days = 7) {
             l.created_at >= dayStart && l.created_at <= dayEnd
         ).length;
 
-        const fups = (followupsData ?? []).filter(
-          (f: { fecha_programada: string }) => f.fecha_programada === fecha
+        const fups = buildUniqueFupDoneRecords(
+          ((completedFollowups ?? []) as unknown as FupDoneFollowupRow[]).filter(
+            (f) => !!f.completado_at && f.completado_at >= dayStart && f.completado_at <= dayEnd
+          ),
+          ((fupInteractions ?? []) as unknown as FupDoneInteractionRow[]).filter(
+            (i) => i.created_at >= dayStart && i.created_at <= dayEnd
+          )
         ).length;
 
         const calEnviados = (interactions ?? []).filter(
@@ -262,31 +298,40 @@ export function useKPIDetail(fecha: string, tipo: KPIDetailType | null) {
       }
 
       if (tipo === "fups") {
-        const { data, error } = await getSupabase()
-          .from("followups")
-          .select("id, completado, hora_programada, lead:leads(id, nombre, estado)")
-          .eq("fecha_programada", fecha)
-          .order("completado", { ascending: true })
-          .order("created_at", { ascending: true });
-        if (error) throw error;
+        const [completedResult, manualResult] = await Promise.all([
+          getSupabase()
+            .from("followups")
+            .select("id, lead_id, completado_at, lead:leads(id, nombre, estado)")
+            .eq("completado", true)
+            .not("completado_at", "is", null)
+            .gte("completado_at", startOfDay)
+            .lte("completado_at", endOfDay),
+          getSupabase()
+            .from("interactions")
+            .select("id, lead_id, tipo, contenido, created_at, lead:leads(id, nombre, estado)")
+            .in("tipo", [FUP_REALIZADO_TIPO, "whatsapp"])
+            .gte("created_at", startOfDay)
+            .lte("created_at", endOfDay),
+        ]);
+        if (completedResult.error) throw completedResult.error;
+        if (manualResult.error) throw manualResult.error;
+
+        const records = buildUniqueFupDoneRecords(
+          (completedResult.data ?? []) as unknown as FupDoneFollowupRow[],
+          (manualResult.data ?? []) as unknown as FupDoneInteractionRow[]
+        );
+
         return {
-          items: (data as unknown as {
-            id: string;
-            completado: boolean;
-            hora_programada: string | null;
-            lead: { id: string; nombre: string; estado: string } | null;
-          }[]).map(
-            (f) => ({
-              id: f.lead?.id ?? f.id,
-              nombre: f.lead?.nombre ?? "—",
-              estado: f.lead?.estado,
-              subtitle: f.completado
-                ? "✓ Completado"
-                : f.hora_programada
-                ? `Hora: ${f.hora_programada}`
-                : "Pendiente",
-            })
-          ),
+          items: records.map((record) => ({
+            id: record.leadId ?? record.key,
+            nombre: record.leadName,
+            estado: record.estado,
+            subtitle: `${getFupDoneSourceLabel(record.sources)} · ${new Date(record.timestamp).toLocaleTimeString("es-AR", {
+              hour: "2-digit",
+              minute: "2-digit",
+            })}`,
+          })),
+          meta: records.length > 0 ? `${records.length} FUP(s) hechos en el día` : undefined,
         } as KPIDetailResult;
       }
 
