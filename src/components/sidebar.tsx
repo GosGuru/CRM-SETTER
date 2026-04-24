@@ -6,6 +6,7 @@ import {
   HiOutlineSquares2X2,
   HiOutlineUsers,
   HiOutlineUserPlus,
+  HiOutlineClipboardDocumentList,
   HiOutlineCog6Tooth,
   HiOutlineArrowRightOnRectangle,
   HiOutlineBars3,
@@ -21,6 +22,7 @@ import { useRouter } from "next/navigation";
 const navigation = [
   { name: "Dashboard", href: "/", icon: HiOutlineSquares2X2 },
   { name: "Leads", href: "/leads", icon: HiOutlineUsers },
+  { name: "Estructura", href: "/leads/new/estructura", icon: HiOutlineClipboardDocumentList },
   { name: "Configuración", href: "/settings", icon: HiOutlineCog6Tooth },
 ];
 
@@ -35,9 +37,12 @@ export function Sidebar() {
     router.push("/login");
   };
 
+  const activeHref = navigation
+    .filter((item) => item.href === "/" ? pathname === "/" : pathname === item.href || pathname.startsWith(`${item.href}/`))
+    .sort((a, b) => b.href.length - a.href.length)[0]?.href;
+
   const isActive = (href: string) => {
-    if (href === "/") return pathname === "/";
-    return pathname.startsWith(href);
+    return activeHref === href;
   };
 
   return (

@@ -4,15 +4,20 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useCreateLead, useBulkCreateLeads } from "@/hooks/use-leads";
 import { useCurrentUser } from "@/hooks/use-users";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { toast } from "sonner";
 import { showLeadAddedToast } from "@/components/lead-added-toast";
-import { localDateStr } from "@/lib/utils";
-import { HiOutlineArrowLeft, HiOutlineUserPlus, HiOutlineUsers } from "react-icons/hi2";
+import { cn, localDateStr } from "@/lib/utils";
+import {
+  HiOutlineArrowLeft,
+  HiOutlineClipboardDocumentCheck,
+  HiOutlineUserPlus,
+  HiOutlineUsers,
+} from "react-icons/hi2";
 import Link from "next/link";
 
 export default function NewLeadPage() {
@@ -74,8 +79,10 @@ export default function NewLeadPage() {
 
     const lines = nombres
       .split(/\r?\n/)
-      .map((l) => l.trim())
-      .filter(Boolean);
+      .flatMap((line) => {
+        const trimmed = line.trim();
+        return trimmed ? [trimmed] : [];
+      });
 
     if (lines.length === 0) {
       toast.error("Ingresá al menos un nombre");
@@ -123,7 +130,7 @@ export default function NewLeadPage() {
   const isPending = createLead.isPending || bulkCreate.isPending;
 
   return (
-    <div className="max-w-md mx-auto space-y-4 animate-blur-in">
+    <div className="max-w-3xl mx-auto space-y-4 animate-blur-in">
       <Link
         href="/leads"
         className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground transition-colors"
@@ -185,7 +192,6 @@ export default function NewLeadPage() {
                   onChange={(e) => setNombre(e.target.value)}
                   placeholder="Pablo Álvarez"
                   required
-                  autoFocus
                 />
               </div>
             ) : (
@@ -198,7 +204,6 @@ export default function NewLeadPage() {
                   placeholder={"Pablo Álvarez\nMaría López\nJuan Pérez"}
                   rows={8}
                   required
-                  autoFocus
                 />
                 {nombres.trim() && (
                   <p className="text-xs text-muted-foreground">
@@ -225,6 +230,35 @@ export default function NewLeadPage() {
                   : "Cargar todos"}
             </Button>
           </form>
+        </CardContent>
+      </Card>
+
+      <Card className="border-primary/20 bg-gradient-to-br from-background via-background to-muted/60">
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <HiOutlineClipboardDocumentCheck className="h-5 w-5 text-primary" />
+            <CardTitle>Estructura</CardTitle>
+          </div>
+          <CardDescription>
+            Entrá a una vista separada para pegar el contenido del PDF, ordenarlo del paso 1 al 5
+            y copiar bloques, segmentaciones, seguimientos o toda la estructura completa.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-muted-foreground">
+            Queda guardado automaticamente en este navegador para volver a usarlo cuando quieras.
+          </p>
+          <Link
+            href="/leads/new/estructura"
+            className={cn(
+              buttonVariants({
+                className: "w-full cursor-pointer sm:w-auto sm:shrink-0",
+              })
+            )}
+          >
+            <HiOutlineClipboardDocumentCheck className="mr-2 h-4 w-4" />
+            Abrir estructura
+          </Link>
         </CardContent>
       </Card>
     </div>
