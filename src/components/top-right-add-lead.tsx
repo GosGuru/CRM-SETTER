@@ -9,19 +9,21 @@ export default function TopRightAddLead() {
   const pathname = usePathname();
   const setQuickAddOpen = useUIStore((s) => s.setQuickAddOpen);
 
-  // Hide on /leads and its subroutes
-  if (pathname?.startsWith("/leads")) return null;
+  // Only hide on the exact /leads listing page
+  const normalized = pathname ? pathname.replace(/\/+$/, "") : pathname;
+  if (normalized === "/leads") return null;
 
   return (
-    <div className="fixed top-3 right-3 z-50">
+    <div className="fixed top-3 right-3 z-[9999] md:top-4 md:right-6">
       <Button
         variant="default"
-        size="icon"
-        className="border border-sidebar-border/80 bg-sidebar/95 text-sidebar-foreground shadow-sm hover:scale-[.99] transition-transform"
+        size="lg"
+        className="h-12 px-3 rounded-full border border-sidebar-border/80 bg-sidebar/95 text-sidebar-foreground shadow-lg transition-transform active:scale-95"
         onClick={() => setQuickAddOpen(true)}
         aria-label="Agregar Lead"
       >
-        <HiOutlineUserPlus className="h-5 w-5" />
+        <HiOutlineUserPlus className="h-6 w-6" />
+        <span className="hidden md:inline ml-2">Agregar Lead</span>
       </Button>
     </div>
   );
