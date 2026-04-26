@@ -701,7 +701,7 @@ export default function LeadsPage() {
       </div>
 
       {/* Buscador y Filtros — sticky */}
-      <div className="sticky top-0 z-30 -mx-4 px-4 py-2 bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/80 border-b">
+      <div className="sticky top-27 z-20 -mx-4 px-4 py-2 bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/80 border-b md:top-16">
       <div className="flex items-center gap-2 w-full animate-blur-fade">
         <div className="relative flex-1 min-w-0">
           <HiOutlineMagnifyingGlass className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -773,10 +773,10 @@ export default function LeadsPage() {
             <div className="flex flex-col gap-8">
               {/* Filtro por estado */}
               <div className="space-y-4">
-                <label className="text-sm font-semibold text-foreground/90 uppercase tracking-wider flex items-center gap-2">
+                <p className="text-sm font-semibold text-foreground/90 uppercase tracking-wider flex items-center gap-2">
                   <Star className="h-4 w-4 text-muted-foreground" />
                   Estado del Lead
-                </label>
+                </p>
                 <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
                   {estados.map((e) => (
                     <Button
@@ -794,10 +794,10 @@ export default function LeadsPage() {
 
               {/* Filtro por fecha y notas */}
               <div className="space-y-4">
-                <label className="text-sm font-semibold text-foreground/90 uppercase tracking-wider flex items-center gap-2">
+                <p className="text-sm font-semibold text-foreground/90 uppercase tracking-wider flex items-center gap-2">
                   <HiOutlineCalendarDays className="h-4 w-4 text-muted-foreground" />
                   Fecha de Creación
-                </label>
+                </p>
                 <div className="flex items-center gap-2 flex-wrap">
                   {[
                     { key: "todos", label: "Todas las fechas" },
@@ -865,10 +865,10 @@ export default function LeadsPage() {
 
               {/* Vista Agendados */}
               <div className="space-y-4">
-                <label className="text-sm font-semibold text-foreground/90 uppercase tracking-wider flex items-center gap-2">
+                <p className="text-sm font-semibold text-foreground/90 uppercase tracking-wider flex items-center gap-2">
                   <HiOutlineCalendarDays className="h-4 w-4 text-muted-foreground" />
                   Vista de Agendados
-                </label>
+                </p>
                 <Button
                   variant={vistaAgendados ? "default" : "outline"}
                   size="sm"
@@ -894,10 +894,10 @@ export default function LeadsPage() {
 
               {/* Ordenamiento */}
               <div className="space-y-4">
-                <label className="text-sm font-semibold text-foreground/90 uppercase tracking-wider flex items-center gap-2">
+                <p className="text-sm font-semibold text-foreground/90 uppercase tracking-wider flex items-center gap-2">
                   <HiOutlineBarsArrowDown className="h-4 w-4 text-muted-foreground" />
                   Ordenado
-                </label>
+                </p>
                 <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
                   {sortOptions.map((opt) => (
                     <Button

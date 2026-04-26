@@ -64,14 +64,14 @@ export function useInfiniteLeads(filters: InfiniteLeadsFilters) {
         query = query.in("estado", ["agendó", "seguimiento"]);
       }
 
-      // Search filter — server-side ilike on nombre, nombre_real, apellido
+      // Search filter — server-side ilike on primary contact fields
       if (filters.search) {
         const term = filters.search.replace(/\s+/g, " ").trim();
         if (term) {
           const escaped = escapeLikePattern(term);
           const pattern = `%${escaped}%`;
           query = query.or(
-            `nombre.ilike.${pattern},nombre_real.ilike.${pattern},apellido.ilike.${pattern}`
+            `nombre.ilike.${pattern},nombre_real.ilike.${pattern},apellido.ilike.${pattern},celular.ilike.${pattern},email.ilike.${pattern},instagram.ilike.${pattern}`
           );
         }
       }
@@ -162,6 +162,34 @@ export function useLeads(filtroEstado?: LeadEstado | "todos") {
       if (error) throw error;
       return data as Lead[];
     },
+  });
+}
+
+export function useLeadSearch(search: string, limit = 8) {
+  const term = search.replace(/\s+/g, " ").trim();
+
+  return useQuery({
+    queryKey: ["lead-search", term, limit],
+    enabled: term.length >= 2,
+    queryFn: async () => {
+      const escaped = escapeLikePattern(term);
+      const pattern = `%${escaped}%`;
+
+      const { data, error } = await getSupabase()
+        .from("leads")
+        .select(LEAD_LIST_SELECT)
+        .or(
+          `nombre.ilike.${pattern},nombre_real.ilike.${pattern},apellido.ilike.${pattern},celular.ilike.${pattern},email.ilike.${pattern},instagram.ilike.${pattern}`
+        )
+        .order("updated_at", { ascending: false })
+        .limit(limit);
+
+      if (error) throw error;
+      return (data ?? []) as unknown as Lead[];
+    },
+    staleTime: 30_000,
+    placeholderData: (previousData) => previousData,
+    retry: 1,
   });
 }
 

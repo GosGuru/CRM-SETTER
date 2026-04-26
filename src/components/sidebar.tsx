@@ -9,12 +9,10 @@ import {
   HiOutlineClipboardDocumentList,
   HiOutlineCog6Tooth,
   HiOutlineArrowRightOnRectangle,
-  HiOutlineBars3,
   HiOutlineXMark,
   HiOutlineRocketLaunch,
 } from "react-icons/hi2";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
 import { useUIStore } from "@/stores/ui-store";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
@@ -47,22 +45,13 @@ export function Sidebar() {
 
   return (
     <>
-      {/* Botón hamburguesa móvil */}
-      <Button
-        variant="ghost"
-        size="icon"
-        className="fixed top-3 left-3 z-50 border border-sidebar-border/80 bg-sidebar/95 text-sidebar-foreground shadow-sm backdrop-blur md:hidden cursor-pointer"
-        onClick={() => setSidebarOpen(!sidebarOpen)}
-        aria-label={sidebarOpen ? "Cerrar menú" : "Abrir menú"}
-      >
-        {sidebarOpen ? <HiOutlineXMark className="h-5 w-5" /> : <HiOutlineBars3 className="h-5 w-5" />}
-      </Button>
-
       {/* Overlay móvil */}
       {sidebarOpen && (
-        <div
+        <button
+          type="button"
           className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm md:hidden animate-blur-fade"
           onClick={() => setSidebarOpen(false)}
+          aria-label="Cerrar menú"
         />
       )}
 
@@ -75,14 +64,24 @@ export function Sidebar() {
       >
         {/* Logo */}
         <div className="flex h-14 items-center border-b border-sidebar-border/90 bg-sidebar px-4">
-          <Link
-            href="/"
-            className="flex items-center gap-2 text-lg font-bold text-sidebar-foreground"
-            onClick={() => setSidebarOpen(false)}
-          >
-            <HiOutlineRocketLaunch className="h-5 w-5 text-primary" />
-            CRM
-          </Link>
+          <div className="flex w-full items-center justify-between gap-3">
+            <Link
+              href="/"
+              className="flex items-center gap-2 text-lg font-bold text-sidebar-foreground"
+              onClick={() => setSidebarOpen(false)}
+            >
+              <HiOutlineRocketLaunch className="h-5 w-5 text-primary" />
+              CRM
+            </Link>
+            <button
+              type="button"
+              onClick={() => setSidebarOpen(false)}
+              className="rounded-lg p-2 text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground md:hidden"
+              aria-label="Cerrar menú"
+            >
+              <HiOutlineXMark className="h-5 w-5" />
+            </button>
+          </div>
         </div>
 
         <div className="space-y-2 border-b border-sidebar-border/90 px-3 py-3">
