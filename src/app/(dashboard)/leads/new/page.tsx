@@ -240,13 +240,13 @@ export default function NewLeadPage() {
             <CardTitle>Estructura</CardTitle>
           </div>
           <CardDescription>
-            Entrá a una vista separada para pegar el contenido del PDF, ordenarlo del paso 1 al 5
-            y copiar bloques, segmentaciones, seguimientos o toda la estructura completa.
+            Entrá a una vista separada con el paso a paso de Método Origen ya cargado para copiar
+            mensajes, follow-ups, objeciones o toda la estructura completa.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-muted-foreground">
-            Queda guardado automaticamente en este navegador para volver a usarlo cuando quieras.
+            Si editás algún texto, queda guardado automáticamente en este navegador para volver a usarlo.
           </p>
           <Link
             href="/leads/new/estructura"

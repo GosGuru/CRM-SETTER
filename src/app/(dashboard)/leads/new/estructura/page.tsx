@@ -5,7 +5,7 @@ import { StructureWorkspace } from "./_components/structure-workspace";
 
 export const metadata: Metadata = {
   title: "Estructura | CRM Setter/Closer",
-  description: "Biblioteca para pegar, revisar y copiar la estructura completa por pasos.",
+  description: "Biblioteca de Método Origen para copiar el paso a paso, follow-ups y objeciones.",
 };
 
 export default function StructurePage() {
@@ -20,10 +20,10 @@ export default function StructurePage() {
       </Link>
 
       <div className="space-y-1">
-        <h1 className="text-2xl font-bold tracking-tight">Estructura</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Estructura Método Origen</h1>
         <p className="max-w-3xl text-sm text-muted-foreground">
-          Entrá por paso, pegá el contenido que seguís desde el PDF y copiá exactamente lo que
-          necesites sin perder la estructura.
+          Tenés el paso a paso del Word ya ordenado para copiar mensajes, follow-ups, objeciones y
+          respuestas sin perder el contexto de cada etapa.
         </p>
       </div>
 
