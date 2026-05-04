@@ -29,12 +29,13 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Si no hay sesión y no está en /login ni en /callback, redirigir a login
-  if (
-    !user &&
-    !request.nextUrl.pathname.startsWith("/login") &&
-    !request.nextUrl.pathname.startsWith("/callback")
-  ) {
+  const publicPath =
+    request.nextUrl.pathname.startsWith("/login") ||
+    request.nextUrl.pathname.startsWith("/callback") ||
+    request.nextUrl.pathname.startsWith("/api/extension");
+
+  // Si no hay sesión y no está en una ruta pública, redirigir a login
+  if (!user && !publicPath) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);

@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "CRM Maxi - Manychat Steps",
+  "description": "Panel compacto de pasos del CRM para copiar y adaptar mensajes dentro de Manychat.",
+  "version": "0.1.0",
+  "permissions": ["activeTab", "clipboardWrite", "storage"],
+  "host_permissions": [
+    "https://app.manychat.com/*",
+    "http://localhost:3000/*",
+    "https://*.vercel.app/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "CRM Maxi pasos"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://app.manychat.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["panel.css"],
+      "matches": ["https://app.manychat.com/*"]
+    }
+  ]
+}

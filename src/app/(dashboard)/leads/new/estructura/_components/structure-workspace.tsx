@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { buildFullCopy, buildStepCopy, extractStructureLines } from "@/lib/structure-format";
 import { useUIStore } from "@/stores/ui-store";
 import {
   DEFAULT_STRUCTURE_DRAFTS,
@@ -28,46 +29,12 @@ import {
   HiOutlineUserPlus,
 } from "react-icons/hi2";
 
-function buildBlockCopy(block: StructureBlock, content: string) {
-  const trimmed = content.trim();
-  if (!trimmed) return "";
-  return `${block.title}\n${trimmed}`;
-}
-
-function buildStepCopy(step: StructureStep, drafts: Record<string, string>) {
-  const sections = step.blocks.flatMap((block) => {
-    const copy = buildBlockCopy(block, drafts[block.id] ?? "");
-    return copy ? [copy] : [];
-  });
-
-  if (sections.length === 0) return "";
-  return `${step.number}. ${step.title}\n\n${sections.join("\n\n")}`;
-}
-
-function buildFullCopy(drafts: Record<string, string>) {
-  const steps = STRUCTURE_STEPS.flatMap((step) => {
-    const copy = buildStepCopy(step, drafts);
-    return copy ? [copy] : [];
-  });
-
-  return steps.join("\n\n--------------------\n\n");
-}
-
-function extractLines(value: string) {
-  return value
-    .split(/\r?\n/)
-    .flatMap((line) => {
-      const trimmed = line.trim();
-      return trimmed ? [trimmed] : [];
-    });
-}
-
 function countCompletedBlocks(step: StructureStep, drafts: Record<string, string>) {
   return step.blocks.filter((block) => (drafts[block.id] ?? "").trim()).length;
 }
 
 function getBlockRows(block: StructureBlock, value: string) {
-  const lineCount = extractLines(value).length;
+  const lineCount = extractStructureLines(value).length;
   const minimumRows = block.kind === "objecion" || block.kind === "mensaje" ? 7 : 5;
 
   return Math.min(Math.max(lineCount + 2, minimumRows), 14);
@@ -128,7 +95,7 @@ export function StructureWorkspace() {
   const previousStep = activeStepIndex > 0 ? STRUCTURE_STEPS[activeStepIndex - 1] : null;
   const nextStep = activeStepIndex < STRUCTURE_STEPS.length - 1 ? STRUCTURE_STEPS[activeStepIndex + 1] : null;
   const activeStepCopy = buildStepCopy(activeStep, drafts);
-  const fullCopy = buildFullCopy(drafts);
+  const fullCopy = buildFullCopy(STRUCTURE_STEPS, drafts);
   const normalizedQuery = query.trim().toLowerCase();
 
   const totalBlocks = useMemo(
@@ -378,7 +345,7 @@ export function StructureWorkspace() {
           {activeStep.blocks.map((block) => {
             const value = drafts[block.id] ?? "";
             const isCopied = copiedKey === block.id;
-            const lines = extractLines(value);
+            const lines = extractStructureLines(value);
 
             return (
               <Card key={block.id} className="min-w-0 border-border/80">
