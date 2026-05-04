@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { buildFullCopy, buildStepCopy, extractStructureLines } from "@/lib/structure-format";
 import { useUIStore } from "@/stores/ui-store";
+import { useStructureDrafts, useSaveStructureDrafts } from "@/hooks/use-structure-drafts";
 import {
   DEFAULT_STRUCTURE_DRAFTS,
   STRUCTURE_KIND_LABELS,
@@ -24,6 +25,7 @@ import {
   HiOutlineChevronRight,
   HiOutlineClipboardDocument,
   HiOutlineCloudArrowUp,
+  HiOutlineExclamationCircle,
   HiOutlineMagnifyingGlass,
   HiOutlineTrash,
   HiOutlineUserPlus,
@@ -59,36 +61,71 @@ export function StructureWorkspace() {
   const setQuickAddOpen = useUIStore((state) => state.setQuickAddOpen);
   const [activeStepId, setActiveStepId] = useState(STRUCTURE_STEPS[0]?.id ?? "paso-1");
   const [drafts, setDrafts] = useState<Record<string, string>>(DEFAULT_STRUCTURE_DRAFTS);
-  const [storageReady, setStorageReady] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
 
+  const remoteApplied = useRef(false);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isFirstDraftsChange = useRef(true);
+
+  const { data: remoteDrafts, isSuccess: remoteLoaded } = useStructureDrafts();
+  const { mutateAsync: saveDrafts } = useSaveStructureDrafts();
+
+  // On first mount: load from localStorage for instant render
   useEffect(() => {
     try {
       const stored = window.localStorage.getItem(STRUCTURE_LIBRARY_STORAGE_KEY);
-      if (!stored) {
-        setStorageReady(true);
-        return;
-      }
-
-      const parsed = JSON.parse(stored);
-      if (parsed && typeof parsed === "object") {
-        setDrafts({
-          ...DEFAULT_STRUCTURE_DRAFTS,
-          ...parsed,
-        });
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed && typeof parsed === "object") {
+          setDrafts({ ...DEFAULT_STRUCTURE_DRAFTS, ...parsed });
+        }
       }
     } catch {
-      toast.error("No se pudo cargar la estructura guardada en este navegador.");
-    } finally {
-      setStorageReady(true);
+      // ignore
     }
   }, []);
 
+  // When remote data arrives, apply it (overrides localStorage — remote is source of truth)
   useEffect(() => {
-    if (!storageReady) return;
+    if (!remoteLoaded || remoteApplied.current) return;
+    remoteApplied.current = true;
+    if (remoteDrafts && typeof remoteDrafts === "object") {
+      const merged = { ...DEFAULT_STRUCTURE_DRAFTS, ...remoteDrafts };
+      setDrafts(merged);
+      window.localStorage.setItem(STRUCTURE_LIBRARY_STORAGE_KEY, JSON.stringify(merged));
+      isFirstDraftsChange.current = true; // reset so next real edit triggers a save
+    }
+  }, [remoteLoaded, remoteDrafts]);
+
+  // Auto-save to Supabase + localStorage with 1.5s debounce on every real change
+  useEffect(() => {
+    // Skip the very first render and the initial hydration from remote
+    if (isFirstDraftsChange.current) {
+      isFirstDraftsChange.current = false;
+      return;
+    }
+
     window.localStorage.setItem(STRUCTURE_LIBRARY_STORAGE_KEY, JSON.stringify(drafts));
-  }, [drafts, storageReady]);
+
+    setSaveStatus("saving");
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(async () => {
+      try {
+        await saveDrafts(drafts);
+        setSaveStatus("saved");
+        setTimeout(() => setSaveStatus("idle"), 2000);
+      } catch {
+        setSaveStatus("error");
+        toast.error("No se pudo guardar en la base de datos. El contenido sigue guardado localmente.");
+      }
+    }, 1500);
+
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    };
+  }, [drafts]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const activeStep = STRUCTURE_STEPS.find((step) => step.id === activeStepId) ?? STRUCTURE_STEPS[0];
   const activeStepIndex = STRUCTURE_STEPS.findIndex((step) => step.id === activeStep.id);
@@ -141,14 +178,20 @@ export function StructureWorkspace() {
     }
   };
 
-  const handleReset = () => {
-    if (!window.confirm("Se va a restaurar la estructura base de Método Origen en este navegador. ¿Seguimos?")) {
+  const handleReset = async () => {
+    if (!window.confirm("Se va a restaurar la estructura base de Método Origen para todos los usuarios. ¿Seguimos?")) {
       return;
     }
 
-    setDrafts(DEFAULT_STRUCTURE_DRAFTS);
-    window.localStorage.removeItem(STRUCTURE_LIBRARY_STORAGE_KEY);
-    toast.success("Estructura restaurada.");
+    const reset = DEFAULT_STRUCTURE_DRAFTS;
+    setDrafts(reset);
+    window.localStorage.setItem(STRUCTURE_LIBRARY_STORAGE_KEY, JSON.stringify(reset));
+    try {
+      await saveDrafts(reset);
+      toast.success("Estructura restaurada.");
+    } catch {
+      toast.error("No se pudo guardar en la base de datos, pero se restauró localmente.");
+    }
   };
 
   return (
@@ -223,12 +266,19 @@ export function StructureWorkspace() {
 
           <div className="rounded-lg border bg-muted/40 p-3 text-xs text-muted-foreground">
             <div className="flex items-center gap-2 text-foreground">
-              <HiOutlineCloudArrowUp className="h-4 w-4" />
-              {storageReady ? "Guardado automático activo" : "Cargando contenido guardado..."}
+              {saveStatus === "error" ? (
+                <HiOutlineExclamationCircle className="h-4 w-4 text-destructive" />
+              ) : (
+                <HiOutlineCloudArrowUp className={`h-4 w-4 ${saveStatus === "saving" ? "animate-pulse" : ""}`} />
+              )}
+              {saveStatus === "saving" && "Guardando en la base de datos..."}
+              {saveStatus === "saved" && <span className="text-green-700">Guardado en la base de datos</span>}
+              {saveStatus === "error" && <span className="text-destructive">Error al guardar remotamente</span>}
+              {saveStatus === "idle" && "Guardado automático activo"}
             </div>
             <p className="mt-1 leading-5">
-              El Word queda como base. Si editás algún texto, se guarda en este navegador sin tocar
-              el resto del CRM.
+              Los cambios se guardan para todos los usuarios del equipo. El Word queda como base de
+              referencia.
             </p>
           </div>
 
@@ -279,6 +329,7 @@ export function StructureWorkspace() {
       <div className="min-w-0 space-y-4">
         <Card className="overflow-hidden border-primary/20 bg-linear-to-br from-background via-background to-muted/60">
           <CardHeader className="space-y-3">
+
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div className="flex flex-wrap items-center gap-2">
                 <Badge variant="secondary">{activeStep.category}</Badge>
@@ -340,6 +391,61 @@ export function StructureWorkspace() {
             </div>
           </CardHeader>
         </Card>
+
+        {/* Sticky step navigation bar */}
+        <div className="sticky top-14 z-20 rounded-xl border bg-background/95 shadow-sm backdrop-blur-sm supports-backdrop-filter:bg-background/90">
+          <div className="flex items-center gap-3 px-4 py-2.5">
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold text-foreground">
+                {activeStep.number}. {activeStep.title}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {activeStep.category} · paso {activeStep.number} de {STRUCTURE_STEPS.length}
+              </p>
+            </div>
+            <div className="flex shrink-0 gap-1.5">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={!previousStep}
+                className="h-8 w-8 cursor-pointer p-0"
+                onClick={() => previousStep && handleStepChange(previousStep.id)}
+                aria-label="Paso anterior"
+              >
+                <HiOutlineChevronLeft className="h-4 w-4" />
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={!nextStep}
+                className="h-8 w-8 cursor-pointer p-0"
+                onClick={() => nextStep && handleStepChange(nextStep.id)}
+                aria-label="Paso siguiente"
+              >
+                <HiOutlineChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+          <div className="overflow-x-auto border-t px-4 py-2">
+            <div className="flex min-w-max gap-1.5">
+              {(visibleSteps.length > 0 ? visibleSteps : STRUCTURE_STEPS).map((step) => (
+                <Button
+                  key={step.id}
+                  type="button"
+                  size="sm"
+                  variant={step.id === activeStepId ? "default" : "ghost"}
+                  aria-current={step.id === activeStepId ? "step" : undefined}
+                  className="h-7 shrink-0 cursor-pointer px-2.5 text-xs font-medium"
+                  onClick={() => handleStepChange(step.id)}
+                >
+                  {step.number}. {step.title}
+                </Button>
+              ))}
+            </div>
+          </div>
+        </div>
 
         <div className="grid gap-4 xl:grid-cols-2">
           {activeStep.blocks.map((block) => {
