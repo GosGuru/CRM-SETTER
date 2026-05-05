@@ -39,10 +39,7 @@ export function useSaveStructureDrafts() {
     mutationFn: async (drafts: Record<string, string>) => {
       const { error } = await getSupabase()
         .from("settings")
-        .upsert(
-          { key: SETTINGS_KEY, value: JSON.stringify(drafts), updated_at: new Date().toISOString() },
-          { onConflict: "key" }
-        );
+        .upsert({ key: SETTINGS_KEY, value: JSON.stringify(drafts), updated_at: new Date().toISOString() });
       if (error) throw error;
     },
     onSuccess: (_data, drafts) => {

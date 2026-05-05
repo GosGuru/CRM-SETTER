@@ -64,6 +64,7 @@ export function StructureWorkspace() {
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const lastDraftsRef = useRef<Record<string, string>>(DEFAULT_STRUCTURE_DRAFTS);
 
   const remoteApplied = useRef(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -109,6 +110,7 @@ export function StructureWorkspace() {
 
     window.localStorage.setItem(STRUCTURE_LIBRARY_STORAGE_KEY, JSON.stringify(drafts));
 
+    lastDraftsRef.current = drafts;
     setSaveStatus("saving");
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(async () => {
@@ -116,7 +118,8 @@ export function StructureWorkspace() {
         await saveDrafts(drafts);
         setSaveStatus("saved");
         setTimeout(() => setSaveStatus("idle"), 2000);
-      } catch {
+      } catch (err) {
+        console.error("[estructura] Error al guardar en Supabase:", err);
         setSaveStatus("error");
         toast.error("No se pudo guardar en la base de datos. El contenido sigue guardado localmente.");
       }
@@ -148,6 +151,19 @@ export function StructureWorkspace() {
     [drafts, normalizedQuery]
   );
   const activeCompletedBlocks = countCompletedBlocks(activeStep, drafts);
+
+  const handleRetry = async () => {
+    setSaveStatus("saving");
+    try {
+      await saveDrafts(lastDraftsRef.current);
+      setSaveStatus("saved");
+      setTimeout(() => setSaveStatus("idle"), 2000);
+    } catch (err) {
+      console.error("[estructura] Error al reintentar guardar en Supabase:", err);
+      setSaveStatus("error");
+      toast.error("No se pudo guardar. Revisá la conexión e intentá de nuevo.");
+    }
+  };
 
   const handleChange = (blockId: string, value: string) => {
     setDrafts((current) => ({
@@ -273,7 +289,15 @@ export function StructureWorkspace() {
               )}
               {saveStatus === "saving" && "Guardando en la base de datos..."}
               {saveStatus === "saved" && <span className="text-green-700">Guardado en la base de datos</span>}
-              {saveStatus === "error" && <span className="text-destructive">Error al guardar remotamente</span>}
+              {saveStatus === "error" && (
+                <button
+                  type="button"
+                  className="text-destructive underline-offset-2 hover:underline cursor-pointer"
+                  onClick={handleRetry}
+                >
+                  Error al guardar — reintentar
+                </button>
+              )}
               {saveStatus === "idle" && "Guardado automático activo"}
             </div>
             <p className="mt-1 leading-5">
