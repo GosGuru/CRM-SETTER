@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -64,7 +64,10 @@ export function StructureWorkspace() {
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [canScrollStickyTabsLeft, setCanScrollStickyTabsLeft] = useState(false);
+  const [canScrollStickyTabsRight, setCanScrollStickyTabsRight] = useState(false);
   const lastDraftsRef = useRef<Record<string, string>>(DEFAULT_STRUCTURE_DRAFTS);
+  const stickyTabsScrollRef = useRef<HTMLDivElement | null>(null);
 
   const remoteApplied = useRef(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -121,7 +124,7 @@ export function StructureWorkspace() {
       } catch (err) {
         console.error("[estructura] Error al guardar en Supabase:", err);
         setSaveStatus("error");
-        toast.error("No se pudo guardar en la base de datos. El contenido sigue guardado localmente.");
+        toast.error("No se pudo guardar en la base de datos. Vamos a reintentar automaticamente.");
       }
     }, 1500);
 
@@ -150,9 +153,34 @@ export function StructureWorkspace() {
     () => STRUCTURE_STEPS.filter((step) => stepMatchesQuery(step, drafts, normalizedQuery)),
     [drafts, normalizedQuery]
   );
+  const navigationSteps = visibleSteps.length > 0 ? visibleSteps : STRUCTURE_STEPS;
   const activeCompletedBlocks = countCompletedBlocks(activeStep, drafts);
 
-  const handleRetry = async () => {
+  const updateStickyTabsScrollState = useCallback(() => {
+    const container = stickyTabsScrollRef.current;
+    if (!container) {
+      setCanScrollStickyTabsLeft(false);
+      setCanScrollStickyTabsRight(false);
+      return;
+    }
+
+    const maxScrollLeft = container.scrollWidth - container.clientWidth;
+    setCanScrollStickyTabsLeft(container.scrollLeft > 4);
+    setCanScrollStickyTabsRight(maxScrollLeft - container.scrollLeft > 4);
+  }, []);
+
+  const scrollStickyTabs = useCallback((direction: "left" | "right") => {
+    const container = stickyTabsScrollRef.current;
+    if (!container) return;
+
+    const offset = Math.max(140, Math.round(container.clientWidth * 0.5));
+    container.scrollBy({
+      left: direction === "left" ? -offset : offset,
+      behavior: "smooth",
+    });
+  }, []);
+
+  const handleRetry = useCallback(async (silent = false) => {
     setSaveStatus("saving");
     try {
       await saveDrafts(lastDraftsRef.current);
@@ -161,9 +189,49 @@ export function StructureWorkspace() {
     } catch (err) {
       console.error("[estructura] Error al reintentar guardar en Supabase:", err);
       setSaveStatus("error");
-      toast.error("No se pudo guardar. Revisá la conexión e intentá de nuevo.");
+      if (!silent) {
+        toast.error("No se pudo guardar. Revisá la conexión e intentá de nuevo.");
+      }
     }
-  };
+  }, [saveDrafts]);
+
+  // If a save fails, keep trying in background so DB converges automatically.
+  useEffect(() => {
+    if (saveStatus !== "error") return;
+
+    const retryTimer = window.setTimeout(() => {
+      void handleRetry(true);
+    }, 5000);
+
+    const retryOnReconnect = () => {
+      void handleRetry(true);
+    };
+
+    window.addEventListener("online", retryOnReconnect);
+
+    return () => {
+      window.clearTimeout(retryTimer);
+      window.removeEventListener("online", retryOnReconnect);
+    };
+  }, [saveStatus, handleRetry]);
+
+  useEffect(() => {
+    const container = stickyTabsScrollRef.current;
+    if (!container) return;
+
+    const handleScroll = () => {
+      updateStickyTabsScrollState();
+    };
+
+    handleScroll();
+    container.addEventListener("scroll", handleScroll, { passive: true });
+    window.addEventListener("resize", handleScroll);
+
+    return () => {
+      container.removeEventListener("scroll", handleScroll);
+      window.removeEventListener("resize", handleScroll);
+    };
+  }, [navigationSteps.length, updateStickyTabsScrollState]);
 
   const handleChange = (blockId: string, value: string) => {
     setDrafts((current) => ({
@@ -397,7 +465,7 @@ export function StructureWorkspace() {
               </div>
               <div className="overflow-x-auto">
                 <div className="flex min-w-max gap-2 pb-1">
-                  {(visibleSteps.length > 0 ? visibleSteps : STRUCTURE_STEPS).map((step) => (
+                  {navigationSteps.map((step) => (
                     <Button
                       key={step.id}
                       type="button"
@@ -427,46 +495,72 @@ export function StructureWorkspace() {
                 {activeStep.category} · paso {activeStep.number} de {STRUCTURE_STEPS.length}
               </p>
             </div>
-            <div className="flex shrink-0 gap-1.5">
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                disabled={!previousStep}
-                className="h-8 w-8 cursor-pointer p-0"
-                onClick={() => previousStep && handleStepChange(previousStep.id)}
-                aria-label="Paso anterior"
-              >
-                <HiOutlineChevronLeft className="h-4 w-4" />
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                disabled={!nextStep}
-                className="h-8 w-8 cursor-pointer p-0"
-                onClick={() => nextStep && handleStepChange(nextStep.id)}
-                aria-label="Paso siguiente"
-              >
-                <HiOutlineChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
           </div>
-          <div className="overflow-x-auto border-t px-4 py-2">
-            <div className="flex min-w-max gap-1.5">
-              {(visibleSteps.length > 0 ? visibleSteps : STRUCTURE_STEPS).map((step) => (
+          <div className="border-t px-3 py-2">
+            <div className="flex items-center gap-1.5">
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                disabled={!canScrollStickyTabsLeft}
+                className="h-7 w-7 shrink-0 cursor-pointer p-0"
+                onClick={() => scrollStickyTabs("left")}
+                aria-label="Desplazar pasos hacia la izquierda"
+              >
+                <HiOutlineChevronLeft className="h-3.5 w-3.5" />
+              </Button>
+              <div ref={stickyTabsScrollRef} className="min-w-0 flex-1 overflow-x-auto">
+                <div className="flex min-w-max gap-1.5 px-1">
+                  {navigationSteps.map((step) => (
+                    <Button
+                      key={step.id}
+                      type="button"
+                      size="sm"
+                      variant={step.id === activeStepId ? "default" : "ghost"}
+                      aria-current={step.id === activeStepId ? "step" : undefined}
+                      className="h-7 shrink-0 cursor-pointer px-2.5 text-xs font-medium"
+                      onClick={() => handleStepChange(step.id)}
+                    >
+                      {step.number}. {step.title}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                disabled={!canScrollStickyTabsRight}
+                className="h-7 w-7 shrink-0 cursor-pointer p-0"
+                onClick={() => scrollStickyTabs("right")}
+                aria-label="Desplazar pasos hacia la derecha"
+              >
+                <HiOutlineChevronRight className="h-3.5 w-3.5" />
+              </Button>
+              <div className="ml-1 flex shrink-0 gap-1.5 border-l pl-1.5">
                 <Button
-                  key={step.id}
                   type="button"
                   size="sm"
-                  variant={step.id === activeStepId ? "default" : "ghost"}
-                  aria-current={step.id === activeStepId ? "step" : undefined}
-                  className="h-7 shrink-0 cursor-pointer px-2.5 text-xs font-medium"
-                  onClick={() => handleStepChange(step.id)}
+                  variant="outline"
+                  disabled={!previousStep}
+                  className="h-7 w-7 cursor-pointer p-0"
+                  onClick={() => previousStep && handleStepChange(previousStep.id)}
+                  aria-label="Paso anterior"
                 >
-                  {step.number}. {step.title}
+                  <HiOutlineChevronLeft className="h-3.5 w-3.5" />
                 </Button>
-              ))}
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={!nextStep}
+                  className="h-7 w-7 cursor-pointer p-0"
+                  onClick={() => nextStep && handleStepChange(nextStep.id)}
+                  aria-label="Paso siguiente"
+                >
+                  <HiOutlineChevronRight className="h-3.5 w-3.5" />
+                </Button>
+              </div>
             </div>
           </div>
         </div>
