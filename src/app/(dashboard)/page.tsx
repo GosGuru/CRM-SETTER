@@ -106,7 +106,7 @@ function ExportKPIsButton({ profileName }: { profileName?: string | null }) {
     <Card className="animate-blur-in">
       <CardHeader className="pb-3">
         <CardTitle className="text-lg flex items-center gap-2">
-          <HiOutlineArrowDownTray className="h-5 w-5 text-emerald-500" />
+          <HiOutlineArrowDownTray className="h-5 w-5 text-kpi-cash" />
           Exportar KPIs + Agendados + FUPs — Excel
         </CardTitle>
       </CardHeader>
@@ -141,7 +141,7 @@ function ExportKPIsButton({ profileName }: { profileName?: string | null }) {
           <Button
             onClick={handleExport}
             disabled={loading}
-            className="cursor-pointer bg-emerald-600 hover:bg-emerald-700"
+            className="cursor-pointer bg-kpi-cash hover:bg-kpi-cash/90"
           >
             <HiOutlineArrowDownTray className="mr-1.5 h-4 w-4" />
             {loading ? "Generando…" : "Descargar Excel completo"}
@@ -379,7 +379,7 @@ export default function DashboardPage() {
             title="Inbound Nuevo"
             value={kpi?.inbound_nuevo ?? 0}
             icon={HiOutlineUserPlus}
-            color="bg-blue-600"
+            color="bg-kpi-inbound"
             delay={1}
             onClick={() => openDetail("inbound")}
           />
@@ -387,7 +387,7 @@ export default function DashboardPage() {
             title="FUPs hechos"
             value={kpi?.fups ?? 0}
             icon={HiOutlinePhoneArrowUpRight}
-            color="bg-indigo-600"
+            color="bg-kpi-fups"
             delay={2}
             onClick={() => openDetail("fups")}
           />
@@ -395,7 +395,7 @@ export default function DashboardPage() {
             title="Cal. Enviados"
             value={kpi?.calendarios_enviados ?? 0}
             icon={HiOutlinePaperAirplane}
-            color="bg-cyan-600"
+            color="bg-kpi-cal"
             delay={3}
             onClick={() => openDetail("cal_enviados")}
           />
@@ -403,7 +403,7 @@ export default function DashboardPage() {
             title="Calls Agendadas"
             value={kpi?.calls_agendadas ?? 0}
             icon={HiOutlineCalendarDays}
-            color="bg-amber-600"
+            color="bg-kpi-calls"
             delay={4}
             onClick={() => openDetail("calls_agendadas")}
           />
@@ -412,7 +412,7 @@ export default function DashboardPage() {
             value={kpi?.tasa_agenda ?? 0}
             suffix="%"
             icon={HiOutlineChartBarSquare}
-            color="bg-emerald-600"
+            color="bg-kpi-tasa"
             delay={5}
             onClick={() => openDetail("tasa")}
           />
@@ -420,7 +420,7 @@ export default function DashboardPage() {
             title="Cash Collected"
             value={`$${kpi?.cash_collected ?? 0}`}
             icon={HiOutlineBanknotes}
-            color="bg-green-600"
+            color="bg-kpi-cash"
             delay={6}
             onClick={() => openDetail("cash")}
           />
@@ -457,37 +457,37 @@ export default function DashboardPage() {
                 <TableBody>
                   <TableRow>
                     <TableCell
-                      className="text-lg font-semibold cursor-pointer hover:text-blue-600 hover:underline"
+                      className="text-lg font-semibold cursor-pointer hover:text-kpi-inbound hover:underline"
                       onClick={() => openDetail("inbound")}
                     >
                       {kpi.inbound_nuevo}
                     </TableCell>
                     <TableCell
-                      className="text-lg font-semibold cursor-pointer hover:text-indigo-600 hover:underline"
+                      className="text-lg font-semibold cursor-pointer hover:text-kpi-fups hover:underline"
                       onClick={() => openDetail("fups")}
                     >
                       {kpi.fups}
                     </TableCell>
                     <TableCell
-                      className="text-lg font-semibold cursor-pointer hover:text-cyan-600 hover:underline"
+                      className="text-lg font-semibold cursor-pointer hover:text-kpi-cal hover:underline"
                       onClick={() => openDetail("cal_enviados")}
                     >
                       {kpi.calendarios_enviados}
                     </TableCell>
                     <TableCell
-                      className="text-lg font-semibold cursor-pointer hover:text-amber-600 hover:underline"
+                      className="text-lg font-semibold cursor-pointer hover:text-kpi-calls hover:underline"
                       onClick={() => openDetail("calls_agendadas")}
                     >
                       {kpi.calls_agendadas}
                     </TableCell>
                     <TableCell
-                      className="text-lg font-semibold cursor-pointer hover:text-emerald-600 hover:underline"
+                      className="text-lg font-semibold cursor-pointer hover:text-kpi-tasa hover:underline"
                       onClick={() => openDetail("tasa")}
                     >
                       {kpi.tasa_agenda}%
                     </TableCell>
                     <TableCell
-                      className="text-lg font-semibold cursor-pointer hover:text-green-600 hover:underline"
+                      className="text-lg font-semibold cursor-pointer hover:text-kpi-cash hover:underline"
                       onClick={() => openDetail("cash")}
                     >
                       ${kpi.cash_collected}
@@ -549,28 +549,28 @@ export default function DashboardPage() {
                   <Legend wrapperStyle={{ fontSize: "12px" }} />
                   <Bar
                     dataKey="Inbound"
-                    fill="#2563eb"
+                    fill="var(--kpi-inbound)"
                     radius={[4, 4, 0, 0]}
                     style={{ cursor: "pointer" }}
                     onClick={(data: unknown) => openDetail("inbound", (data as { fechaISO?: string }).fechaISO)}
                   />
                   <Bar
                     dataKey="FUPs hechos"
-                    fill="#4f46e5"
+                    fill="var(--kpi-fups)"
                     radius={[4, 4, 0, 0]}
                     style={{ cursor: "pointer" }}
                     onClick={(data: unknown) => openDetail("fups", (data as { fechaISO?: string }).fechaISO)}
                   />
                   <Bar
                     dataKey="Cal. Env."
-                    fill="#0891b2"
+                    fill="var(--kpi-cal)"
                     radius={[4, 4, 0, 0]}
                     style={{ cursor: "pointer" }}
                     onClick={(data: unknown) => openDetail("cal_enviados", (data as { fechaISO?: string }).fechaISO)}
                   />
                   <Bar
                     dataKey="Agendadas"
-                    fill="#d97706"
+                    fill="var(--kpi-calls)"
                     radius={[4, 4, 0, 0]}
                     style={{ cursor: "pointer" }}
                     onClick={(data: unknown) => openDetail("calls_agendadas", (data as { fechaISO?: string }).fechaISO)}
@@ -590,7 +590,7 @@ export default function DashboardPage() {
       <div className="animate-blur-in stagger-4">
         <div className="flex items-center gap-3 mb-3">
           <h2 className="text-lg font-semibold flex items-center gap-2">
-            <HiOutlineClipboardDocumentCheck className="h-5 w-5 text-indigo-500" />
+            <HiOutlineClipboardDocumentCheck className="h-5 w-5 text-kpi-fups" />
             FUPs programados del día
           </h2>
           {fupsTotal > 0 && (
@@ -638,7 +638,7 @@ export default function DashboardPage() {
         {/* Calls del día sin pagar — subsección dentro de FUPs */}
         {!followUpsLoading && callsSinPagar.length > 0 && (
           <div className="mt-4">
-            <h3 className="text-sm font-semibold mb-2 flex items-center gap-1.5 text-orange-700">
+            <h3 className="text-sm font-semibold mb-2 flex items-center gap-1.5 text-callout-warning-text">
               <span>📞</span> Calls del día sin pagar reunión
             </h3>
             <div className="space-y-2">
@@ -653,7 +653,7 @@ export default function DashboardPage() {
       {/* Calls agendadas */}
       <div className="animate-blur-in stagger-5">
         <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
-          <HiOutlineBellAlert className="h-5 w-5 text-amber-500" />
+          <HiOutlineBellAlert className="h-5 w-5 text-callout-warning-icon" />
           Calls agendadas
         </h2>
         {followUpsLoading ? (
@@ -666,10 +666,10 @@ export default function DashboardPage() {
           <div className="space-y-4">
             {callsSinPagar.length > 0 && (
               <div>
-                <h3 className="text-sm font-semibold mb-2 flex items-center gap-1.5 text-orange-700">
+                <h3 className="text-sm font-semibold mb-2 flex items-center gap-1.5 text-callout-warning-text">
                   <span>📞</span> Sin pagar reunión
                 </h3>
-                <div className="space-y-2 rounded-xl border-2 border-orange-200 bg-orange-50 p-2">
+                <div className="space-y-2 rounded-xl border-2 border-callout-warning-border bg-callout-warning-bg p-2">
                   {callsSinPagar.map((lead) => (
                     <LeadCard key={lead.id} lead={lead} />
                   ))}
@@ -678,10 +678,10 @@ export default function DashboardPage() {
             )}
             {callsPagaron.length > 0 && (
               <div>
-                <h3 className="text-sm font-semibold mb-2 flex items-center gap-1.5 text-green-700">
+                <h3 className="text-sm font-semibold mb-2 flex items-center gap-1.5 text-callout-success-text">
                   <span>✅</span> Pagaron reunión
                 </h3>
-                <div className="space-y-2 rounded-xl border-2 border-green-200 bg-green-50 p-2">
+                <div className="space-y-2 rounded-xl border-2 border-callout-success-border bg-callout-success-bg p-2">
                   {callsPagaron.map((lead) => (
                     <LeadCard key={lead.id} lead={lead} />
                   ))}

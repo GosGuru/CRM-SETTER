@@ -4,26 +4,26 @@ import { cn } from "@/lib/utils";
 
 const estadoConfig: Record<
   LeadEstado,
-  { label: string; variant: "default" | "secondary" | "destructive" | "outline" }
+  { label: string }
 > = {
-  nuevo: { label: "Nuevo", variant: "default" },
-  agendó: { label: "Agendado", variant: "secondary" },
-  cerrado: { label: "Cerrado", variant: "destructive" },
-  pagó: { label: "Pagó", variant: "outline" },
+  nuevo: { label: "Nuevo" },
+  agendó: { label: "Agendado" },
+  cerrado: { label: "Cerrado" },
+  pagó: { label: "Pagó" },
 };
 
 const estadoColors: Record<LeadEstado, string> = {
-  nuevo: "bg-blue-100 text-blue-800 hover:bg-blue-100",
-  agendó: "bg-amber-100 text-amber-800 hover:bg-amber-100",
-  cerrado: "bg-red-100 text-red-800 hover:bg-red-100",
-  pagó: "bg-green-100 text-green-800 hover:bg-green-100",
+  nuevo: "border-transparent bg-status-nuevo-bg text-status-nuevo-text hover:bg-status-nuevo-bg",
+  agendó: "border-transparent bg-status-agendo-bg text-status-agendo-text hover:bg-status-agendo-bg",
+  cerrado: "border-transparent bg-status-cerrado-bg text-status-cerrado-text hover:bg-status-cerrado-bg",
+  pagó: "border-transparent bg-status-pago-bg text-status-pago-text hover:bg-status-pago-bg",
 };
 
 const estadoDotColors: Record<LeadEstado, string> = {
-  nuevo: "bg-blue-500",
-  agendó: "bg-amber-500",
-  cerrado: "bg-red-500",
-  pagó: "bg-green-500",
+  nuevo: "bg-status-nuevo-dot",
+  agendó: "bg-status-agendo-dot",
+  cerrado: "bg-status-cerrado-dot",
+  pagó: "bg-status-pago-dot",
 };
 
 export function StatusBadge({
@@ -35,9 +35,9 @@ export function StatusBadge({
 }) {
   // Normalize legacy "seguimiento" value (leads not yet migrated in DB)
   const key: LeadEstado = (estado as string) === "seguimiento" ? "agendó" : estado;
-  const config = estadoConfig[key] ?? { label: key, variant: "secondary" as const };
-  const colorClass = estadoColors[key] ?? "bg-gray-100 text-gray-800 hover:bg-gray-100";
-  const dotClass = estadoDotColors[key] ?? "bg-gray-500";
+  const config = estadoConfig[key] ?? { label: key };
+  const colorClass = estadoColors[key] ?? "border-transparent bg-muted text-muted-foreground hover:bg-muted";
+  const dotClass = estadoDotColors[key] ?? "bg-muted-foreground";
 
   if (compact) {
     return (
@@ -54,7 +54,7 @@ export function StatusBadge({
   }
 
   return (
-    <Badge variant={config.variant} className={colorClass}>
+    <Badge variant="outline" className={colorClass}>
       {config.label}
     </Badge>
   );

@@ -10,7 +10,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { buildFullCopy, buildStepCopy, extractStructureLines, isCopyableStructureBlock } from "@/lib/structure-format";
 import { useUIStore } from "@/stores/ui-store";
-import { useStructureDrafts, useSaveStructureDrafts } from "@/hooks/use-structure-drafts";
+import {
+  isStructureDraftsSchemaMissingError,
+  useStructureDrafts,
+  useSaveStructureDrafts,
+} from "@/hooks/use-structure-drafts";
 import {
   DEFAULT_STRUCTURE_DRAFTS,
   STRUCTURE_KIND_LABELS,
@@ -64,6 +68,7 @@ export function StructureWorkspace() {
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [schemaMissing, setSchemaMissing] = useState(false);
   const [canScrollStickyTabsLeft, setCanScrollStickyTabsLeft] = useState(false);
   const [canScrollStickyTabsRight, setCanScrollStickyTabsRight] = useState(false);
   const lastDraftsRef = useRef<Record<string, string>>(DEFAULT_STRUCTURE_DRAFTS);
@@ -72,6 +77,7 @@ export function StructureWorkspace() {
   const remoteApplied = useRef(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isFirstDraftsChange = useRef(true);
+  const schemaToastShownRef = useRef(false);
 
   const { data: remoteDrafts, isSuccess: remoteLoaded } = useStructureDrafts();
   const { mutateAsync: saveDrafts } = useSaveStructureDrafts();
@@ -114,16 +120,34 @@ export function StructureWorkspace() {
     window.localStorage.setItem(STRUCTURE_LIBRARY_STORAGE_KEY, JSON.stringify(drafts));
 
     lastDraftsRef.current = drafts;
+
+    if (schemaMissing) {
+      setSaveStatus("error");
+      return;
+    }
+
     setSaveStatus("saving");
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(async () => {
       try {
         await saveDrafts(drafts);
+        setSchemaMissing(false);
+        schemaToastShownRef.current = false;
         setSaveStatus("saved");
         setTimeout(() => setSaveStatus("idle"), 2000);
       } catch (err) {
         console.error("[estructura] Error al guardar en Supabase:", err);
+        const missingSchema = isStructureDraftsSchemaMissingError(err);
+        setSchemaMissing(missingSchema);
         setSaveStatus("error");
+        if (missingSchema) {
+          if (!schemaToastShownRef.current) {
+            toast.error("No se puede guardar en DB: falta la migración 010_settings_table.sql en Supabase.");
+            schemaToastShownRef.current = true;
+          }
+          return;
+        }
+
         toast.error("No se pudo guardar en la base de datos. Vamos a reintentar automaticamente.");
       }
     }, 1500);
@@ -131,7 +155,7 @@ export function StructureWorkspace() {
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     };
-  }, [drafts]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [drafts, schemaMissing]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const activeStep = STRUCTURE_STEPS.find((step) => step.id === activeStepId) ?? STRUCTURE_STEPS[0];
   const activeStepIndex = STRUCTURE_STEPS.findIndex((step) => step.id === activeStep.id);
@@ -184,12 +208,20 @@ export function StructureWorkspace() {
     setSaveStatus("saving");
     try {
       await saveDrafts(lastDraftsRef.current);
+      setSchemaMissing(false);
+      schemaToastShownRef.current = false;
       setSaveStatus("saved");
       setTimeout(() => setSaveStatus("idle"), 2000);
     } catch (err) {
       console.error("[estructura] Error al reintentar guardar en Supabase:", err);
+      const missingSchema = isStructureDraftsSchemaMissingError(err);
+      setSchemaMissing(missingSchema);
       setSaveStatus("error");
       if (!silent) {
+        if (missingSchema) {
+          toast.error("No se puede guardar en DB: falta la migración 010_settings_table.sql en Supabase.");
+          return;
+        }
         toast.error("No se pudo guardar. Revisá la conexión e intentá de nuevo.");
       }
     }
@@ -197,7 +229,7 @@ export function StructureWorkspace() {
 
   // If a save fails, keep trying in background so DB converges automatically.
   useEffect(() => {
-    if (saveStatus !== "error") return;
+    if (saveStatus !== "error" || schemaMissing) return;
 
     const retryTimer = window.setTimeout(() => {
       void handleRetry(true);
@@ -213,7 +245,7 @@ export function StructureWorkspace() {
       window.clearTimeout(retryTimer);
       window.removeEventListener("online", retryOnReconnect);
     };
-  }, [saveStatus, handleRetry]);
+  }, [saveStatus, handleRetry, schemaMissing]);
 
   useEffect(() => {
     const container = stickyTabsScrollRef.current;
@@ -357,11 +389,16 @@ export function StructureWorkspace() {
               )}
               {saveStatus === "saving" && "Guardando en la base de datos..."}
               {saveStatus === "saved" && <span className="text-green-700">Guardado en la base de datos</span>}
-              {saveStatus === "error" && (
+              {saveStatus === "error" && schemaMissing && (
+                <span className="text-destructive">Falta la migración 010_settings_table.sql en Supabase</span>
+              )}
+              {saveStatus === "error" && !schemaMissing && (
                 <button
                   type="button"
                   className="text-destructive underline-offset-2 hover:underline cursor-pointer"
-                  onClick={handleRetry}
+                  onClick={() => {
+                    void handleRetry();
+                  }}
                 >
                   Error al guardar — reintentar
                 </button>

@@ -3,6 +3,20 @@ import { createClient } from "@/lib/supabase/client";
 
 const SETTINGS_KEY = "structure_drafts";
 const QUERY_KEY = ["structure-drafts"];
+const SETTINGS_TABLE_MISSING_CODE = "PGRST205";
+
+export class StructureDraftsSchemaMissingError extends Error {
+  constructor() {
+    super("No existe la tabla public.settings en Supabase.");
+    this.name = "StructureDraftsSchemaMissingError";
+  }
+}
+
+export function isStructureDraftsSchemaMissingError(
+  error: unknown
+): error is StructureDraftsSchemaMissingError {
+  return error instanceof StructureDraftsSchemaMissingError;
+}
 
 function sanitizeDrafts(drafts: Record<string, string>) {
   const entries = Object.entries(drafts).map(([key, value]) => [
@@ -11,6 +25,20 @@ function sanitizeDrafts(drafts: Record<string, string>) {
     value.replace(/\u0000/g, ""),
   ]);
   return Object.fromEntries(entries) as Record<string, string>;
+}
+
+function normalizeStructureDraftsError(error: unknown): Error {
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: string }).code === SETTINGS_TABLE_MISSING_CODE
+  ) {
+    return new StructureDraftsSchemaMissingError();
+  }
+
+  if (error instanceof Error) return error;
+  return new Error("Error desconocido al guardar la estructura.");
 }
 
 let _supabase: ReturnType<typeof createClient>;
@@ -29,7 +57,7 @@ export function useStructureDrafts() {
         .eq("key", SETTINGS_KEY)
         .maybeSingle();
 
-      if (error) throw error;
+      if (error) throw normalizeStructureDraftsError(error);
       if (!data?.value) return null;
 
       try {
@@ -66,7 +94,8 @@ export function useSaveStructureDrafts() {
           { key: SETTINGS_KEY, value: JSON.stringify(sanitizedDrafts), updated_at: new Date().toISOString() },
           { onConflict: "key" }
         );
-      if (error) throw error;
+
+      if (error) throw normalizeStructureDraftsError(error);
 
       return sanitizedDrafts;
     },

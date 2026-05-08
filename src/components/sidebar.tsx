@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 import { useUIStore } from "@/stores/ui-store";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
+import { ThemeSelector } from "@/components/theme-selector";
 
 const navigation = [
   { name: "Dashboard", href: "/", icon: HiOutlineSquares2X2 },
@@ -127,7 +128,8 @@ export function Sidebar() {
         </nav>
 
         {/* Logout */}
-        <div className="border-t border-sidebar-border/90 bg-sidebar px-3 py-3">
+        <div className="space-y-2 border-t border-sidebar-border/90 bg-sidebar px-3 py-3">
+          <ThemeSelector />
           <button
             onClick={handleLogout}
             className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-all duration-200 cursor-pointer"

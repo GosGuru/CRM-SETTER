@@ -34,11 +34,11 @@ function LeadAddedToastContent({
   });
 
   return (
-    <div className="w-full sm:w-[420px] mx-auto flex flex-col rounded-xl border bg-background shadow-lg p-4">
+    <div className="w-full sm:w-105 mx-auto flex flex-col rounded-xl border bg-background shadow-lg p-4">
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-start gap-3">
-          <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center shrink-0">
-            <HiOutlineUserCircle className="h-5 w-5 text-green-600" />
+          <div className="h-10 w-10 rounded-full bg-status-pago-bg flex items-center justify-center shrink-0">
+            <HiOutlineUserCircle className="h-5 w-5 text-status-pago-dot" />
           </div>
           <div className="min-w-0">
             <p className="text-sm font-semibold text-foreground">

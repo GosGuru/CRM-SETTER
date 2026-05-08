@@ -83,7 +83,7 @@ export function PaymentSection({ lead }: PaymentSectionProps) {
     <Card>
       <CardHeader className="pb-3">
         <CardTitle className="text-lg flex items-center gap-2">
-          <HiOutlineBanknotes className="h-5 w-5 text-green-600" />
+          <HiOutlineBanknotes className="h-5 w-5 text-kpi-cash" />
           Pago del programa
         </CardTitle>
       </CardHeader>
@@ -97,11 +97,11 @@ export function PaymentSection({ lead }: PaymentSectionProps) {
             aria-pressed={pagoProg}
           >
             {pagoProg ? (
-              <HiOutlineCheckCircle className="h-6 w-6 text-green-600" />
+              <HiOutlineCheckCircle className="h-6 w-6 text-kpi-cash" />
             ) : (
               <HiOutlineXCircle className="h-6 w-6 text-muted-foreground" />
             )}
-            <span className={`text-sm font-medium ${pagoProg ? "text-green-700" : "text-muted-foreground"}`}>
+            <span className={`text-sm font-medium ${pagoProg ? "text-kpi-cash" : "text-muted-foreground"}`}>
               {pagoProg ? "Pagó el programa" : "No pagó el programa"}
             </span>
           </button>
@@ -148,7 +148,7 @@ export function PaymentSection({ lead }: PaymentSectionProps) {
               {montoNum > 0 && (
                 <p className="text-xs text-muted-foreground">
                   Tu comisión ({Math.round(commissionRate * 100)}%):{" "}
-                  <strong className="text-green-700">${commission.toFixed(2)}</strong>
+                  <strong className="text-kpi-cash">${commission.toFixed(2)}</strong>
                 </p>
               )}
             </div>

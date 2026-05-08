@@ -19,12 +19,12 @@ const TIPO_CONFIG: Record<
   KPIDetailType,
   { label: string; icon: React.ElementType; color: string }
 > = {
-  inbound: { label: "Inbound Nuevo", icon: HiOutlineUserPlus, color: "text-blue-600" },
-  fups: { label: "FUPs hechos", icon: HiOutlinePhoneArrowUpRight, color: "text-indigo-600" },
-  cal_enviados: { label: "Calendarios Enviados", icon: HiOutlinePaperAirplane, color: "text-cyan-600" },
-  calls_agendadas: { label: "Calls Agendadas", icon: HiOutlineCalendarDays, color: "text-amber-600" },
-  tasa: { label: "Tasa de Agenda", icon: HiOutlineChartBarSquare, color: "text-emerald-600" },
-  cash: { label: "Cash Collected", icon: HiOutlineBanknotes, color: "text-green-600" },
+  inbound: { label: "Inbound Nuevo", icon: HiOutlineUserPlus, color: "text-kpi-inbound" },
+  fups: { label: "FUPs hechos", icon: HiOutlinePhoneArrowUpRight, color: "text-kpi-fups" },
+  cal_enviados: { label: "Calendarios Enviados", icon: HiOutlinePaperAirplane, color: "text-kpi-cal" },
+  calls_agendadas: { label: "Calls Agendadas", icon: HiOutlineCalendarDays, color: "text-kpi-calls" },
+  tasa: { label: "Tasa de Agenda", icon: HiOutlineChartBarSquare, color: "text-kpi-tasa" },
+  cash: { label: "Cash Collected", icon: HiOutlineBanknotes, color: "text-kpi-cash" },
 };
 
 interface KPIDetailDialogProps {
@@ -102,7 +102,7 @@ export function KPIDetailDialog({
                             <StatusBadge estado={item.estado as import("@/types/database").LeadEstado} />
                           )}
                           {item.amount !== undefined && (
-                            <span className="text-sm font-semibold text-green-600">
+                            <span className="text-sm font-semibold text-kpi-cash">
                               ${item.amount.toFixed(2)}
                             </span>
                           )}
