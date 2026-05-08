@@ -31,13 +31,10 @@ export function useCreateInteraction() {
     mutationFn: async (
       interaction: Omit<Interaction, "id" | "created_at" | "user">
     ) => {
-      const { data, error } = await getSupabase()
+      const { error } = await getSupabase()
         .from("interactions")
-        .insert(interaction)
-        .select()
-        .single();
+        .insert(interaction);
       if (error) throw error;
-      return data;
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({
@@ -57,12 +54,10 @@ export function useBulkCreateInteractions() {
     mutationFn: async (
       interactions: Omit<Interaction, "id" | "created_at" | "user">[]
     ) => {
-      const { data, error } = await getSupabase()
+      const { error } = await getSupabase()
         .from("interactions")
-        .insert(interactions)
-        .select();
+        .insert(interactions);
       if (error) throw error;
-      return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["interactions"] });

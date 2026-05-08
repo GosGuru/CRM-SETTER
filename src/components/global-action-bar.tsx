@@ -6,11 +6,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { KPIDetailDialog } from "@/components/kpi-detail-dialog";
 import { StatusBadge } from "@/components/status-badge";
-import { useLeadQuickActions } from "@/hooks/use-lead-quick-actions";
-import { useLeadSearch } from "@/hooks/use-leads";
+import { FUP_REALIZADO_TIPO } from "@/lib/fup-metrics";
+import { useBulkCreateInteractions } from "@/hooks/use-interactions";
+import { useLeadSearch, type LeadSearchResult } from "@/hooks/use-leads";
 import { useStats } from "@/hooks/use-stats";
+import { useCurrentUser } from "@/hooks/use-users";
 import { useUIStore } from "@/stores/ui-store";
-import type { KPIDetailType, Lead } from "@/types/database";
+import type { InteractionTipo, KPIDetailType } from "@/types/database";
+import { toast } from "sonner";
 import {
   HiOutlineArrowTopRightOnSquare,
   HiOutlineBars3,
@@ -31,7 +34,7 @@ function formatFechaLabel(fecha: string) {
   });
 }
 
-function getLeadMeta(lead: Lead) {
+function getLeadMeta(lead: LeadSearchResult) {
   const parts = [lead.celular, lead.email, lead.instagram]
     .filter((value): value is string => Boolean(value?.trim()))
     .slice(0, 2);
@@ -80,12 +83,14 @@ function MetricButton({
 function LeadResult({
   lead,
   onOpen,
+  onQuickAction,
+  quickActionsPending,
 }: {
-  lead: Lead;
+  lead: LeadSearchResult;
   onOpen: (leadId: string) => void;
+  onQuickAction: (lead: LeadSearchResult, tipo: InteractionTipo, contenido: string) => void;
+  quickActionsPending: boolean;
 }) {
-  const quickActions = useLeadQuickActions();
-
   return (
     <li className="rounded-xl border bg-background p-2 shadow-sm">
       <button
@@ -108,8 +113,8 @@ function LeadResult({
           type="button"
           variant="outline"
           size="sm"
-          disabled={quickActions.isPending}
-          onClick={() => quickActions.markFupDone(lead.id, lead.nombre)}
+          disabled={quickActionsPending}
+          onClick={() => onQuickAction(lead, FUP_REALIZADO_TIPO, "FUP realizado")}
           className="h-8 min-w-0 cursor-pointer text-xs text-indigo-600 hover:bg-indigo-50"
           aria-label={`Registrar FUP hecho para ${lead.nombre}`}
         >
@@ -120,8 +125,8 @@ function LeadResult({
           type="button"
           variant="outline"
           size="sm"
-          disabled={quickActions.isPending}
-          onClick={() => quickActions.markWhatsAppSent(lead.id, lead.nombre)}
+          disabled={quickActionsPending}
+          onClick={() => onQuickAction(lead, "whatsapp", "WhatsApp enviado")}
           className="h-8 min-w-0 cursor-pointer text-xs"
           aria-label={`Registrar WhatsApp para ${lead.nombre}`}
         >
@@ -132,8 +137,8 @@ function LeadResult({
           type="button"
           variant="outline"
           size="sm"
-          disabled={quickActions.isPending}
-          onClick={() => quickActions.markCallDone(lead.id, lead.nombre)}
+          disabled={quickActionsPending}
+          onClick={() => onQuickAction(lead, "llamada", "Llamada realizada")}
           className="h-8 min-w-0 cursor-pointer text-xs"
           aria-label={`Registrar llamada para ${lead.nombre}`}
         >
@@ -152,7 +157,9 @@ export function GlobalActionBar() {
   const sidebarOpen = useUIStore((state) => state.sidebarOpen);
   const setSidebarOpen = useUIStore((state) => state.setSidebarOpen);
   const setQuickAddOpen = useUIStore((state) => state.setQuickAddOpen);
+  const { data: currentUser } = useCurrentUser();
   const { data: stats, isLoading: statsLoading } = useStats(fecha);
+  const bulkInteractions = useBulkCreateInteractions();
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [panelOpen, setPanelOpen] = useState(false);
@@ -191,6 +198,21 @@ export function GlobalActionBar() {
     setPanelOpen(false);
     setSearch("");
     router.push(`/leads/${leadId}`);
+  };
+
+  const registerQuickAction = (lead: LeadSearchResult, tipo: InteractionTipo, contenido: string) => {
+    if (!currentUser) {
+      toast.error("Todavía se está cargando tu usuario");
+      return;
+    }
+
+    bulkInteractions.mutate(
+      [{ lead_id: lead.id, user_id: currentUser.id, tipo, contenido }],
+      {
+        onSuccess: () => toast.success(`${contenido} para ${lead.nombre}`),
+        onError: (err) => toast.error(`Error: ${err.message}`),
+      }
+    );
   };
 
   const kpi = stats?.kpi;
@@ -263,7 +285,13 @@ export function GlobalActionBar() {
                   ) : leadResults.length > 0 ? (
                     <ul className="space-y-2">
                       {leadResults.map((lead) => (
-                        <LeadResult key={lead.id} lead={lead} onOpen={openLead} />
+                        <LeadResult
+                          key={lead.id}
+                          lead={lead}
+                          onOpen={openLead}
+                          onQuickAction={registerQuickAction}
+                          quickActionsPending={bulkInteractions.isPending}
+                        />
                       ))}
                     </ul>
                   ) : (

@@ -1,7 +1,7 @@
-import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useInfiniteQuery, useMutation, useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { localDateStr, localDayBoundsISO } from "@/lib/utils";
-import type { Lead, LeadEstado } from "@/types/database";
+import type { Lead, LeadEstado, User } from "@/types/database";
 
 // --- Infinite leads (server-side filtering + pagination) ---
 
@@ -19,6 +19,16 @@ export type InfiniteLeadsFilters = {
 
 const LEAD_LIST_SELECT =
   "id, nombre, nombre_real, apellido, celular, email, instagram, estado, closer_id, closer_nombre, setter_id, fecha_call, fecha_call_set_at, pinned, created_at, updated_at, pago_programa, pago_reunion, plan_pago, monto_programa, fecha_pago, respuestas, objetivo, edad, trabajo, decisor, inversion_ok, compromiso, cliente_potencial, califica_economicamente, closer:users!leads_closer_id_fkey(id,full_name), setter:users!leads_setter_id_fkey(id,full_name)";
+
+const LEAD_SEARCH_SELECT =
+  "id, nombre, nombre_real, apellido, celular, email, instagram, estado, closer:users!leads_closer_id_fkey(id,full_name)";
+
+export type LeadSearchResult = Pick<
+  Lead,
+  "id" | "nombre" | "nombre_real" | "apellido" | "celular" | "email" | "instagram" | "estado"
+> & {
+  closer?: Pick<User, "id" | "full_name"> | null;
+};
 
 function normalizeStoredName(value: string): string {
   return value.replace(/\s+/g, " ").trim();
@@ -177,7 +187,7 @@ export function useLeadSearch(search: string, limit = 8) {
 
       const { data, error } = await getSupabase()
         .from("leads")
-        .select(LEAD_LIST_SELECT)
+        .select(LEAD_SEARCH_SELECT)
         .or(
           `nombre.ilike.${pattern},nombre_real.ilike.${pattern},apellido.ilike.${pattern},celular.ilike.${pattern},email.ilike.${pattern},instagram.ilike.${pattern}`
         )
@@ -185,17 +195,37 @@ export function useLeadSearch(search: string, limit = 8) {
         .limit(limit);
 
       if (error) throw error;
-      return (data ?? []) as unknown as Lead[];
+      return (data ?? []) as unknown as LeadSearchResult[];
     },
-    staleTime: 30_000,
+    staleTime: 2 * 60_000,
     placeholderData: (previousData) => previousData,
     retry: 1,
   });
 }
 
 export function useLead(id: string) {
+  const queryClient = useQueryClient();
+
   return useQuery({
     queryKey: ["lead", id],
+    initialData: () => {
+      const infiniteQueries = queryClient.getQueriesData<InfiniteData<Lead[], number>>({
+        queryKey: ["leads-infinite"],
+      });
+
+      for (const [, queryData] of infiniteQueries) {
+        const lead = queryData?.pages.flat().find((item) => item.id === id);
+        if (lead) return lead;
+      }
+
+      const listQueries = queryClient.getQueriesData<Lead[]>({ queryKey: ["leads"] });
+      for (const [, queryData] of listQueries) {
+        const lead = queryData?.find((item) => item.id === id);
+        if (lead) return lead;
+      }
+
+      return undefined;
+    },
     queryFn: async () => {
       const { data, error } = await getSupabase()
         .from("leads")

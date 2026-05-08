@@ -2,6 +2,7 @@
 
 import { memo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { StatusBadge } from "@/components/status-badge";
 import {
@@ -43,7 +44,9 @@ interface LeadCardProps {
 
 export const LeadCard = memo(function LeadCardInner({ lead, selectable, selected, onToggle, onTogglePin, lastNote, onAction }: LeadCardProps) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [copied, setCopied] = useState(false);
+  const leadHref = `/leads/${lead.id}`;
 
   // Nombre principal: nombre_real + apellido si existen, si no, lead.nombre
   const primaryName = lead.nombre_real
@@ -73,8 +76,15 @@ export const LeadCard = memo(function LeadCardInner({ lead, selectable, selected
     if (selectable) {
       onToggle?.(lead.id);
     } else {
-      router.push(`/leads/${lead.id}`);
+      queryClient.setQueryData(["lead", lead.id], lead);
+      router.push(leadHref);
     }
+  };
+
+  const prepareLeadDetail = () => {
+    if (selectable) return;
+    queryClient.setQueryData(["lead", lead.id], lead);
+    router.prefetch(leadHref);
   };
 
   const handleCopyName = (e: React.MouseEvent) => {
@@ -91,6 +101,8 @@ export const LeadCard = memo(function LeadCardInner({ lead, selectable, selected
   return (
     <Card
       onClick={handleCardClick}
+      onFocus={prepareLeadDetail}
+      onMouseEnter={prepareLeadDetail}
       style={{ contentVisibility: "auto", containIntrinsicSize: "0 90px" }}
       className={cn(
         "transition-all duration-200 cursor-pointer hover:shadow-md group",
