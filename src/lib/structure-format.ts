@@ -1,6 +1,12 @@
 import type { StructureBlock, StructureStep } from "@/app/(dashboard)/leads/new/estructura/_data/structure-library";
 
+export function isCopyableStructureBlock(block: StructureBlock) {
+  return block.kind !== "razon";
+}
+
 export function buildBlockCopy(block: StructureBlock, content: string) {
+  if (!isCopyableStructureBlock(block)) return "";
+
   const trimmed = content.trim();
   if (!trimmed) return "";
   return `${block.title}\n${trimmed}`;

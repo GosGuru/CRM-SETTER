@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { buildFullCopy, buildStepCopy, extractStructureLines } from "@/lib/structure-format";
+import { buildFullCopy, buildStepCopy, extractStructureLines, isCopyableStructureBlock } from "@/lib/structure-format";
 import { useUIStore } from "@/stores/ui-store";
 import { useStructureDrafts, useSaveStructureDrafts } from "@/hooks/use-structure-drafts";
 import {
@@ -212,7 +212,7 @@ export function StructureWorkspace() {
 
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(220px,300px)_minmax(0,1fr)]">
-      <Card className="h-fit lg:sticky lg:top-6 lg:max-h-[calc(100vh-3rem)] lg:overflow-hidden">
+      <Card className="hidden h-fit lg:flex lg:sticky lg:top-6 lg:max-h-[calc(100vh-3rem)] lg:overflow-hidden">
         <CardHeader className="space-y-3 pb-3">
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant="secondary">Método Origen</Badge>
@@ -351,7 +351,7 @@ export function StructureWorkspace() {
       </Card>
 
       <div className="min-w-0 space-y-4">
-        <Card className="overflow-hidden border-primary/20 bg-linear-to-br from-background via-background to-muted/60">
+        <Card className="hidden overflow-hidden border-primary/20 bg-linear-to-br from-background via-background to-muted/60 lg:flex">
           <CardHeader className="space-y-3">
 
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -474,6 +474,7 @@ export function StructureWorkspace() {
         <div className="grid gap-4 xl:grid-cols-2">
           {activeStep.blocks.map((block) => {
             const value = drafts[block.id] ?? "";
+            const canCopyBlock = isCopyableStructureBlock(block);
             const isCopied = copiedKey === block.id;
             const lines = extractStructureLines(value);
 
@@ -488,37 +489,43 @@ export function StructureWorkspace() {
                         <CardDescription className="leading-6">{block.helper}</CardDescription>
                       </div>
                     </div>
-                    <div className="grid w-full grid-cols-2 gap-2 sm:w-auto sm:flex sm:shrink-0 sm:items-center">
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="secondary"
-                        className="w-full cursor-pointer sm:w-auto"
-                        onClick={() => setQuickAddOpen(true)}
-                      >
-                        <HiOutlineUserPlus className="mr-1 h-3.5 w-3.5" />
-                        Lead
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant={isCopied ? "secondary" : "outline"}
-                        className="w-full cursor-pointer sm:w-auto"
-                        onClick={() => handleCopy(value, block.id, block.title)}
-                      >
-                        {isCopied ? (
-                          <>
-                            <HiOutlineCheck className="mr-1 h-3.5 w-3.5" />
-                            Copiado
-                          </>
-                        ) : (
-                          <>
-                            <HiOutlineClipboardDocument className="mr-1 h-3.5 w-3.5" />
-                            Copiar
-                          </>
-                        )}
-                      </Button>
-                    </div>
+                    {canCopyBlock ? (
+                      <div className="grid w-full grid-cols-2 gap-2 sm:w-auto sm:flex sm:shrink-0 sm:items-center">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="secondary"
+                          className="w-full cursor-pointer sm:w-auto"
+                          onClick={() => setQuickAddOpen(true)}
+                        >
+                          <HiOutlineUserPlus className="mr-1 h-3.5 w-3.5" />
+                          Lead
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={isCopied ? "secondary" : "outline"}
+                          className="w-full cursor-pointer sm:w-auto"
+                          onClick={() => handleCopy(value, block.id, block.title)}
+                        >
+                          {isCopied ? (
+                            <>
+                              <HiOutlineCheck className="mr-1 h-3.5 w-3.5" />
+                              Copiado
+                            </>
+                          ) : (
+                            <>
+                              <HiOutlineClipboardDocument className="mr-1 h-3.5 w-3.5" />
+                              Copiar
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="w-full rounded-lg border border-dashed bg-muted/40 px-3 py-2 text-xs text-muted-foreground sm:w-auto">
+                        Instruccion interna: se guarda para guiar al setter y no se copia.
+                      </div>
+                    )}
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-2">
@@ -530,14 +537,20 @@ export function StructureWorkspace() {
                     className="min-h-36 resize-y font-mono text-sm leading-6"
                   />
                   <div className="flex flex-col gap-1 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-                    <span>
-                      {value.trim()
-                        ? `${value.trim().length} caracteres listos para copiar`
-                        : "Todavía no hay texto en este bloque."}
-                    </span>
-                    <span>{value.trim() ? "Editable" : "Vacío"}</span>
+                    {canCopyBlock ? (
+                      <>
+                        <span>
+                          {value.trim()
+                            ? `${value.trim().length} caracteres listos para copiar`
+                            : "Todavía no hay texto en este bloque."}
+                        </span>
+                        <span>{value.trim() ? "Editable" : "Vacío"}</span>
+                      </>
+                    ) : (
+                      <span>Bloque de instruccion: queda como referencia y no se incluye en copias.</span>
+                    )}
                   </div>
-                  {lines.length > 0 && (
+                  {canCopyBlock && lines.length > 0 && (
                     <div className="space-y-2 border-t pt-3">
                       <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                         Copiar por renglón
