@@ -1,7 +1,7 @@
 (function () {
   const HOST_ID = "crm-maxi-manychat-panel";
   const DEFAULT_DEV_CRM_BASE_URL = "http://localhost:3000";
-  const DEFAULT_PRODUCTION_CRM_BASE_URL = "https://crmmaxi.vercel.app";
+  const DEFAULT_PRODUCTION_CRM_BASE_URL = "https://crm-setter.vercel.app";
   const DRAFT_OVERRIDES_KEY = "crmStructureDraftOverrides";
   const MAX_CONTEXT_LINES = 24;
   const AI_PROVIDERS = [

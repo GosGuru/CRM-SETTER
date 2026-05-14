@@ -1,0 +1,158 @@
+{
+  "capturedAt": "2026-05-09T21:51:08.023Z",
+  "projectUrl": "https://qsodjuxnvemqhwcsmwkq.supabase.co",
+  "users": {
+    "ok": true,
+    "data": [
+      {
+        "id": "1936d87b-2097-40f1-9dc2-47dd689975ea",
+        "email": "mporcile@estudiante.ceibal.edu.uy",
+        "full_name": "MAXIMO PORCILE GALLO",
+        "role": "setter",
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocIVo-42zc9B07RjZK_XLsFjciiZX_KoZA_VSOnDy4kHxCTmyA=s96-c",
+        "created_at": "2026-03-29T19:35:51.520861+00:00",
+        "name": "MAXIMO PORCILE GALLO",
+        "timezone": "America/Argentina/Buenos_Aires",
+        "updated_at": "2026-05-09T20:43:01.20569+00:00"
+      },
+      {
+        "id": "71d997f3-5c80-4337-9d07-ddc9dada21ea",
+        "email": "brunodavidecit@gmail.com",
+        "full_name": "Bruno Davide",
+        "role": "setter",
+        "avatar_url": null,
+        "created_at": "2026-04-23T17:13:24.042987+00:00",
+        "name": "Bruno Davide",
+        "timezone": "America/Argentina/Buenos_Aires",
+        "updated_at": "2026-05-09T20:43:01.20569+00:00"
+      },
+      {
+        "id": "46bfe22b-e83b-4488-9572-6df3b61ffa6c",
+        "email": "mfacu5992@gmail.com",
+        "full_name": "Martinez Facundo",
+        "role": "setter",
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocJO0YgwLWE5NbG7nXvhN6RHJSphxLssQfamW2n0WZGRqasdmGpL=s96-c",
+        "created_at": "2026-04-23T17:15:13.443076+00:00",
+        "name": "Martinez Facundo",
+        "timezone": "America/Argentina/Buenos_Aires",
+        "updated_at": "2026-05-09T20:43:01.20569+00:00"
+      },
+      {
+        "id": "445a2eba-1b03-42e4-8172-d3838f74888f",
+        "email": "maximogallo13@gmail.com",
+        "full_name": "Maximo Gallo",
+        "role": "setter",
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocLcyAOpnWpYyOm5G4sjlJaZjePvdEWT9DDYJcy81QJdGisTYqJ1=s96-c",
+        "created_at": "2026-03-27T21:03:21.485657+00:00",
+        "name": "Maximo Gallo",
+        "timezone": "America/Argentina/Buenos_Aires",
+        "updated_at": "2026-05-09T20:41:09.806+00:00"
+      }
+    ]
+  },
+  "followups": {
+    "ok": true,
+    "data": [
+      {
+        "id": "aa4f66b8-32eb-41e0-aafb-4ae40aad4bef",
+        "lead_id": "ad788ca7-497f-4068-afd3-20116dfd586c",
+        "user_id": "445a2eba-1b03-42e4-8172-d3838f74888f",
+        "fecha_programada": "2026-04-02",
+        "completado": true,
+        "completado_at": "2026-04-02T11:32:44.237+00:00",
+        "created_at": "2026-04-01T23:36:46.323634+00:00",
+        "hora_programada": "08:00:00"
+      },
+      {
+        "id": "da29bea1-1e94-44dd-8333-2256feb544d5",
+        "lead_id": "f1b4eddc-fb6f-4617-be28-8f5741d6ff50",
+        "user_id": "445a2eba-1b03-42e4-8172-d3838f74888f",
+        "fecha_programada": "2026-04-02",
+        "completado": true,
+        "completado_at": "2026-04-02T11:37:03.836+00:00",
+        "created_at": "2026-04-01T23:50:07.982245+00:00",
+        "hora_programada": "08:00:00"
+      },
+      {
+        "id": "b966a4c0-54fe-445b-817a-6f3893ba3bb6",
+        "lead_id": "c62225c9-20cc-4eb6-8cb0-2dba33ce33ea",
+        "user_id": "445a2eba-1b03-42e4-8172-d3838f74888f",
+        "fecha_programada": "2026-04-02",
+        "completado": true,
+        "completado_at": "2026-04-02T11:38:47.096+00:00",
+        "created_at": "2026-04-01T23:50:35.645099+00:00",
+        "hora_programada": "08:00:00"
+      },
+      {
+        "id": "87117e46-43be-4b76-aa54-52d470d751c5",
+        "lead_id": "56cd84de-d481-480d-991e-00ccf9dc605e",
+        "user_id": "445a2eba-1b03-42e4-8172-d3838f74888f",
+        "fecha_programada": "2026-04-02",
+        "completado": true,
+        "completado_at": "2026-04-02T11:39:12.594+00:00",
+        "created_at": "2026-04-02T02:57:21.02843+00:00",
+        "hora_programada": "08:15:00"
+      },
+      {
+        "id": "bc06b646-3681-4961-985c-c4242f64b05f",
+        "lead_id": "735fc831-da3b-4754-934a-99ee86950cca",
+        "user_id": "445a2eba-1b03-42e4-8172-d3838f74888f",
+        "fecha_programada": "2026-04-02",
+        "completado": true,
+        "completado_at": "2026-04-02T11:47:03.943+00:00",
+        "created_at": "2026-04-02T02:58:28.540926+00:00",
+        "hora_programada": "08:15:00"
+      },
+      {
+        "id": "a2e480ad-e341-4234-8056-f6a267cee0f0",
+        "lead_id": "61ef5a49-3431-4a39-a91b-ac7ce4e3db94",
+        "user_id": "445a2eba-1b03-42e4-8172-d3838f74888f",
+        "fecha_programada": "2026-04-05",
+        "completado": false,
+        "completado_at": null,
+        "created_at": "2026-04-05T03:32:22.179875+00:00",
+        "hora_programada": "10:00:00"
+      },
+      {
+        "id": "c14ca479-e8f9-4f59-8646-66b830dddece",
+        "lead_id": "5331a7f8-86f1-4274-8b08-29d0f96b8dff",
+        "user_id": "445a2eba-1b03-42e4-8172-d3838f74888f",
+        "fecha_programada": "2026-04-05",
+        "completado": false,
+        "completado_at": null,
+        "created_at": "2026-04-05T05:01:49.470947+00:00",
+        "hora_programada": "10:00:00"
+      },
+      {
+        "id": "e2012e92-da67-4beb-8848-816f4698d332",
+        "lead_id": "5c374a5a-f426-42f4-888e-d2a062bc0bbe",
+        "user_id": "445a2eba-1b03-42e4-8172-d3838f74888f",
+        "fecha_programada": "2026-04-10",
+        "completado": false,
+        "completado_at": null,
+        "created_at": "2026-04-09T18:31:33.672512+00:00",
+        "hora_programada": "10:00:00"
+      },
+      {
+        "id": "1afa5631-0f18-4b9d-9a19-b1345734c0a5",
+        "lead_id": "4475eae2-0a30-4af7-9539-d4aba3913312",
+        "user_id": "445a2eba-1b03-42e4-8172-d3838f74888f",
+        "fecha_programada": "2026-04-28",
+        "completado": false,
+        "completado_at": null,
+        "created_at": "2026-04-28T03:33:00.004995+00:00",
+        "hora_programada": "10:00:00"
+      },
+      {
+        "id": "5a4ac208-53c6-4ba2-8d69-9468a046d134",
+        "lead_id": "5043655b-61ac-42d3-a184-6bd9b3597c90",
+        "user_id": "445a2eba-1b03-42e4-8172-d3838f74888f",
+        "fecha_programada": "2026-04-28",
+        "completado": false,
+        "completado_at": null,
+        "created_at": "2026-04-28T03:48:15.502847+00:00",
+        "hora_programada": "10:00:00"
+      }
+    ]
+  }
+}

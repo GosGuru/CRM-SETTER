@@ -125,7 +125,18 @@ export async function POST(request: Request) {
     return json({ error: "Nombre requerido." }, 400);
   }
 
-  const adminClient = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, serviceRoleKey, {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!supabaseUrl) {
+    return json(
+      {
+        error: "NEXT_PUBLIC_SUPABASE_URL no está configurada en el servidor.",
+        code: "SUPABASE_URL_NOT_CONFIGURED",
+      },
+      501
+    );
+  }
+
+  const adminClient = createClient(supabaseUrl, serviceRoleKey, {
     auth: {
       persistSession: false,
     },
